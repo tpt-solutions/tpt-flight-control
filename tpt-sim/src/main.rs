@@ -1,36 +1,42 @@
-//! `tpt-sim` — runs the hover scenario and prints the result.
+//! `tpt-sim` — runs hover and waypoint scenarios and prints the result.
 
+use tpt_core::PositionTarget;
 use tpt_sim::Sim;
 
 fn main() {
-    println!("TPT Flight Control — SITL hover scenario (Phase 0 milestone)");
+    println!("TPT Flight Control — SITL scenarios (Phase 0/1)");
 
-    // Start level, then run 10 s and confirm a stable hover.
-    let mut sim = Sim::new();
-    sim.run(10.0, 0.001);
-
-    let p = sim.plant();
+    // 1) Hover at the origin.
+    let mut hover = Sim::new();
+    hover.run(10.0, 0.001);
+    let p = hover.plant();
     println!(
-        "level start   -> pos = ({:.3}, {:.3}, {:.3}) m, |attitude| = {:.3} rad",
-        p.pos.x,
-        p.pos.y,
-        p.pos.z,
-        sim.max_attitude_seen()
+        "hover          -> pos = ({:.2}, {:.2}, {:.2}) m, |att| = {:.3} rad",
+        p.pos.x, p.pos.y, p.pos.z, hover.max_attitude_seen()
     );
 
-    // Start with a 12-degree initial roll disturbance; the controller must
-    // recover to a stable hover.
-    let mut sim2 = Sim::with_initial_attitude(0.21, 0.0, 0.0);
-    sim2.run(10.0, 0.001);
-    let p2 = sim2.plant();
+    // 2) Recover from an initial attitude disturbance.
+    let mut rec = Sim::with_initial_attitude(0.21, 0.0, 0.0);
+    rec.run(15.0, 0.001);
+    let p = rec.plant();
     println!(
-        "disturbed start-> pos = ({:.3}, {:.3}, {:.3}) m, |attitude| = {:.3} rad",
-        p2.pos.x,
-        p2.pos.y,
-        p2.pos.z,
-        sim2.max_attitude_seen()
+        "recover        -> pos = ({:.2}, {:.2}, {:.2}) m, final att = {:.3} rad",
+        p.pos.x, p.pos.y, p.pos.z, rec.attitude().0
     );
 
-    println!("Motors (final): {:?}", sim2.motors());
-    println!("Hover demonstration complete.");
+    // 3) Fly to a waypoint (5, 5, 2 m above origin).
+    let mut wp = Sim::new();
+    let mut tgt = PositionTarget::origin();
+    tgt.x = 5.0;
+    tgt.y = 5.0;
+    tgt.z = -2.0;
+    wp.set_target(tgt);
+    wp.run(25.0, 0.001);
+    let p = wp.plant();
+    println!(
+        "waypoint (5,5) -> pos = ({:.2}, {:.2}, {:.2}) m, |att| = {:.3} rad",
+        p.pos.x, p.pos.y, p.pos.z, wp.max_attitude_seen()
+    );
+
+    println!("Simulation scenarios complete.");
 }

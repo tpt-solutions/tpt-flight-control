@@ -40,3 +40,37 @@ pub struct VelocitySetpoint {
     pub vy: f64,
     pub vz: f64,
 }
+
+/// Position/heading target for the guidance (navigation) loop.
+///
+/// Coordinates are in the local navigation frame (NED, meters). `z` is down
+/// positive, so a target altitude of `0` is the origin and a *negative* `z`
+/// means "above the origin". `yaw` is the desired heading in radians.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PositionTarget {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+    /// Desired velocity setpoints (m/s). Zero = position-hold at `x/y/z`.
+    pub vx: f64,
+    pub vy: f64,
+    pub vz: f64,
+    /// Desired yaw (rad).
+    pub yaw: f64,
+}
+
+impl PositionTarget {
+    /// A position-hold target at the origin, zero heading.
+    pub const fn origin() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+            vx: 0.0,
+            vy: 0.0,
+            vz: 0.0,
+            yaw: 0.0,
+        }
+    }
+}
+

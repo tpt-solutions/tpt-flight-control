@@ -6,48 +6,48 @@ Derived from `spec.txt` (v0.2.0-DRAFT). High-level milestone tracking across the
 
 ## Phase -1: Repository & Governance Setup
 
-- [ ] Initialize git repository, `.gitignore` (Rust/Cargo), `LICENSE` (Apache 2.0)
-- [ ] Create root Cargo workspace (`Cargo.toml`) with feature-flag scaffold (`stack-bare-metal`, `stack-ferrocene`, `stack-sovereign`, `vehicle-drone`, `vehicle-evtol`, `vehicle-transport`, `gps-denied-nav`, `tan-nav`)
-- [ ] Scaffold repository structure (empty crates) per §17:
-  - [ ] `tpt-core/`
-  - [ ] `tpt-math/`
-  - [ ] `tpt-sensor-fusion/`
-  - [ ] `tpt-mapping/` (`vio/`, `slam/`, `tan/`, `octree/`)
-  - [ ] `tpt-mixer/`
-  - [ ] `tpt-abstractions/`
-  - [ ] `tpt-backend-bare-metal/`
-  - [ ] `tpt-backend-freertos/`
-  - [ ] `tpt-backend-zephyr/`
-  - [ ] `tpt-backend-pikeos/`
-  - [ ] `tpt-backend-sel4/`
-  - [ ] `tpt-sovereign-toolchain/`
-  - [ ] `tpt-sim/`
-  - [ ] `tpt-gcs/`
-  - [ ] `tpt-protocols/`
-  - [ ] `reference-hardware/`
-  - [ ] `certification/`
-  - [ ] `docs/`
-- [ ] Add `CONTRIBUTING.md` with DCO sign-off requirement
-- [ ] Add `CODEOWNERS` / domain-expert review requirement for flight-critical and mapping-critical code
-- [ ] Set up CI (build + test across `no_std` targets, lint, formatting)
-- [ ] Set up SBOM generation and reproducible build pipeline (§19.2)
+- [x] Initialize git repository, `.gitignore` (Rust/Cargo), `LICENSE` (Apache 2.0)
+- [x] Create root Cargo workspace (`Cargo.toml`) with feature-flag scaffold (`stack-bare-metal`, `stack-ferrocene`, `stack-sovereign`, `vehicle-drone`, `vehicle-evtol`, `vehicle-transport`, `gps-denied-nav`, `tan-nav`)
+- [x] Scaffold repository structure (empty crates) per §17:
+  - [x] `tpt-core/`
+  - [x] `tpt-math/`
+  - [x] `tpt-sensor-fusion/`
+  - [x] `tpt-mapping/` (`vio/`, `slam/`, `tan/`, `octree/`)
+  - [x] `tpt-mixer/`
+  - [x] `tpt-abstractions/`
+  - [x] `tpt-backend-bare-metal/`
+  - [x] `tpt-backend-freertos/`
+  - [x] `tpt-backend-zephyr/`
+  - [x] `tpt-backend-pikeos/`
+  - [x] `tpt-backend-sel4/`
+  - [x] `tpt-sovereign-toolchain/`
+  - [x] `tpt-sim/`
+  - [x] `tpt-gcs/`
+  - [x] `tpt-protocols/`
+  - [x] `reference-hardware/`
+  - [x] `certification/`
+  - [x] `docs/`
+- [x] Add `CONTRIBUTING.md` with DCO sign-off requirement
+- [x] Add `CODEOWNERS` / domain-expert review requirement for flight-critical and mapping-critical code
+- [x] Set up CI (build + test across `no_std` targets, lint, formatting)
+- [x] Set up SBOM generation and reproducible build pipeline (§19.2)
 - [ ] Establish dependency vendoring/audit process for all Rust crates
 
 ---
 
 ## Phase 0: Foundation (Months 1-3)
 
-- [ ] Define core trait abstractions in `tpt-abstractions` (§5):
-  - [ ] `Imu`, `Gnss`, `VisualSensor`, `LidarSensor`, `RadarAltimeter`
-  - [ ] `SpatialMap`, `TerrainDatabase`
-  - [ ] `Motor`, `ControlSurface`, `Scheduler`, `PartitionChannel`, `MemoryPool`, `PowerSystem`
-- [ ] Implement `tpt-math` (verified-friendly linear algebra, quaternions, Kalman primitives on `nalgebra` `no_std`)
-- [ ] Implement basic PID controller with anti-windup in `tpt-core`
-- [ ] Implement complementary filter AHRS in `tpt-sensor-fusion`
-- [ ] Implement quadcopter mixer in `tpt-mixer`
-- [ ] Implement time-triggered rate-group scheduler (1000/200/50/10/1 Hz) per §4.2
-- [ ] Build basic physics simulator + SITL in `tpt-sim`
-- [ ] **Milestone: Virtual quadcopter hovers in simulation**
+- [x] Define core trait abstractions in `tpt-abstractions` (§5):
+  - [x] `Imu`, `Gnss`, `VisualSensor`, `LidarSensor`, `RadarAltimeter`
+  - [x] `SpatialMap`, `TerrainDatabase`
+  - [x] `Motor`, `ControlSurface`, `Scheduler`, `PartitionChannel`, `MemoryPool`, `PowerSystem`
+- [x] Implement `tpt-math` (verified-friendly linear algebra, quaternions, Kalman primitives on `nalgebra` `no_std`)
+- [x] Implement basic PID controller with anti-windup in `tpt-core`
+- [x] Implement complementary filter AHRS in `tpt-sensor-fusion`
+- [x] Implement quadcopter mixer in `tpt-mixer`
+- [x] Implement time-triggered rate-group scheduler (1000/200/50/10/1 Hz) per §4.2
+- [x] Build basic physics simulator + SITL in `tpt-sim`
+- [x] **Milestone: Virtual quadcopter hovers in simulation**
 
 ## Phase 1: First Flight & Basic Drones (Months 4-9)
 

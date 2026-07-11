@@ -14,4 +14,4 @@ pub mod plant;
 pub mod sim;
 
 pub use plant::Plant;
-pub use sim::{OuterGains, Sim};
+pub use sim::Sim;

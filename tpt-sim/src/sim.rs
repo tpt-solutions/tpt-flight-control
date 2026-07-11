@@ -1,42 +1,17 @@
 //! Closed-loop simulation harness — the Phase 0 "hover in simulation"
-//! milestone. Wires the AHRS, cascaded attitude controller, non-bypassable
-//! envelope protection, and quad-X mixer around the [`plant`](crate::plant).
+//! milestone, extended in Phase 1 with GPS/position-hold guidance. Wires the
+//! AHRS, cascaded attitude controller, non-bypassable envelope protection,
+//! position/guidance controller, and quad-X mixer around the
+//! [`plant`](crate::plant).
 
-use crate::plant::{Plant, sanitize_motors};
+use crate::plant::{GRAVITY, Plant, sanitize_motors};
 use tpt_core::{
     AttitudeController, AttitudeSetpoint, EnvelopeConfig, EnvelopeProtector, FlightStateMachine,
-    VehicleState,
+    PositionController, PositionTarget, VehicleState,
 };
 use tpt_math::Vector3;
 use tpt_mixer::{ControlCommand, MotorMixer, QuadXMixer};
 use tpt_sensor_fusion::ComplementaryAhrs;
-
-/// Gains / targets for the outer (navigation) loop.
-#[derive(Debug, Clone, Copy)]
-pub struct OuterGains {
-    /// Altitude proportional gain (fraction of thrust per meter).
-    pub kp_alt: f64,
-    /// Altitude derivative gain (fraction of thrust per m/s).
-    pub kd_alt: f64,
-    /// Yaw-hold gain (rad/s of yaw-rate per rad of yaw error).
-    pub kp_yaw: f64,
-    /// Collective thrust at hover (fraction, ~0.5).
-    pub hover_thrust: f64,
-    /// Target altitude in NED z (meters; default 0 = origin).
-    pub target_z: f64,
-}
-
-impl Default for OuterGains {
-    fn default() -> Self {
-        Self {
-            kp_alt: 0.08,
-            kd_alt: 0.15,
-            kp_yaw: 0.6,
-            hover_thrust: 0.5,
-            target_z: 0.0,
-        }
-    }
-}
 
 /// Fully wired simulation.
 pub struct Sim {
@@ -46,7 +21,8 @@ pub struct Sim {
     envelope: EnvelopeProtector,
     mixer: QuadXMixer,
     fsm: FlightStateMachine,
-    outer: OuterGains,
+    guidance: PositionController,
+    target: PositionTarget,
     tick: u64,
     motors: [f64; 4],
     /// Last computed attitude setpoint (for inspection/telemetry).
@@ -66,13 +42,24 @@ impl Sim {
             envelope: EnvelopeProtector::new(EnvelopeConfig::default()),
             mixer: QuadXMixer,
             fsm: FlightStateMachine::new(),
-            outer: OuterGains::default(),
+            guidance: PositionController::new(tpt_core::guidance::PositionGains::default()),
+            target: PositionTarget::origin(),
             tick: 0,
             motors: [0.0; 4],
             last_setpoint: AttitudeSetpoint::default(),
             max_attitude: 0.0,
             max_plant_attitude: 0.0,
         }
+    }
+
+    /// Set the navigation target (waypoint / position hold).
+    pub fn set_target(&mut self, target: PositionTarget) {
+        self.target = target;
+    }
+
+    /// Current navigation target.
+    pub fn target(&self) -> PositionTarget {
+        self.target
     }
 
     /// Start from a perturbed attitude to demonstrate stabilization.
@@ -127,32 +114,7 @@ impl Sim {
         self.ahrs.update(accel, gyro, dt);
         let (roll, pitch, yaw) = self.ahrs.attitude();
 
-        // 3) Outer (navigation) loop at 200 Hz.
-        let outer_tick = self.tick % 5 == 0; // dt = 1ms -> 5ms = 200Hz
-        let mut setpoint = self.last_setpoint;
-        if outer_tick {
-            let z = self.plant.pos.z;
-            let vz = self.plant.vel.z;
-            // Altitude hold: more thrust when below target (z > target_z).
-            let thrust = self.outer.hover_thrust
-                + self.outer.kp_alt * (z - self.outer.target_z)
-                + self.outer.kd_alt * vz;
-            let thrust = thrust.clamp(0.0, 1.0);
-            // Attitude is held level; horizontal translation control (guidance
-            // / waypoint following) is added in later phases. The vehicle
-            // therefore maintains a stable hover (altitude + level attitude)
-            // but does not yet hold horizontal position.
-            let yaw_rate = -self.outer.kp_yaw * yaw;
-            setpoint = AttitudeSetpoint {
-                roll: 0.0,
-                pitch: 0.0,
-                yaw_rate,
-                thrust,
-            };
-            self.last_setpoint = setpoint;
-        }
-
-        // 4) Build vehicle state for the control laws.
+        // 3) Build the vehicle state for the control laws.
         let state = VehicleState {
             position: self.plant.pos,
             velocity: self.plant.vel,
@@ -161,6 +123,21 @@ impl Sim {
             pose: None,
             battery: 1.0,
         };
+
+        // 4) Guidance (navigation) loop at 200 Hz: produce an attitude
+        //    setpoint that drives the vehicle to `self.target`.
+        let outer_tick = self.tick % 5 == 0; // dt = 1ms -> 5ms = 200Hz
+        let mut setpoint = self.last_setpoint;
+        if outer_tick {
+            setpoint = self.guidance.update(&self.target, &state, GRAVITY);
+            self.last_setpoint = setpoint;
+        }
+        if self.tick % 2000 == 0 {
+            eprintln!(
+                "dbg tick {} thrust {:.3} roll {:.3} pitch {:.3} z {:.3} vz {:.3}",
+                self.tick, setpoint.thrust, setpoint.roll, setpoint.pitch, self.plant.pos.z, self.plant.vel.z
+            );
+        }
 
         // 5) Attitude controller (inner loop, 1000 Hz).
         let moments = self.controller.update(&setpoint, &state, dt);
@@ -197,7 +174,7 @@ impl Sim {
                 let _ = self.fsm.handle(tpt_core::FlightEvent::CommandTakeoff);
             }
             tpt_core::FlightMode::Takeoff => {
-                if self.plant.pos.z < self.outer.target_z + 0.05 {
+                if self.plant.pos.z < self.target.z + 0.05 {
                     let _ = self
                         .fsm
                         .handle(tpt_core::FlightEvent::ReachedTargetAltitude);
