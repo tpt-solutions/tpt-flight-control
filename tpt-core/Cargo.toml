@@ -10,6 +10,7 @@ description = "Flight control laws, state machine, envelope protection, schedule
 tpt-math.workspace = true
 tpt-abstractions.workspace = true
 tpt-mapping = { workspace = true, optional = true }
+libm = "0.2"
 
 [features]
 default = []

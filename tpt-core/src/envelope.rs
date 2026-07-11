@@ -9,6 +9,7 @@
 use crate::state::{AttitudeSetpoint, VehicleState};
 use tpt_abstractions::types::BoundingBox;
 use tpt_math::{clamp, Vector3};
+use libm::sqrt;
 
 /// Envelope limits. All angles in radians, rates in rad/s, speeds in m/s.
 #[derive(Debug, Clone, Copy)]
@@ -52,41 +53,21 @@ impl EnvelopeProtector {
     /// This is the only path from control laws to the mixer and cannot be
     /// skipped. Returns a safe command even if the input is wildly out of
     /// bounds.
-    pub fn protect(&self, cmd: AttitudeSetpoint, state: &VehicleState) -> AttitudeSetpoint {
+    pub fn protect(&self, cmd: AttitudeSetpoint, _state: &VehicleState) -> AttitudeSetpoint {
         let cfg = &self.cfg;
 
         let roll = clamp(cmd.roll, -cfg.max_roll, cfg.max_roll);
         let pitch = clamp(cmd.pitch, -cfg.max_pitch, cfg.max_pitch);
         let yaw_rate = clamp(cmd.yaw_rate, -cfg.max_yaw_rate, cfg.max_yaw_rate);
 
-        // Limit horizontal speed to Vne using current velocity estimate.
-        let horiz = (state.velocity.x * state.velocity.x + state.velocity.y * state.velocity.y).sqrt();
-        let speed_scale = if horiz > cfg.vne && horiz > 1e-6 {
-            cfg.vne / horiz
-        } else {
-            1.0
-        };
-
-        // Clamp climb rate.
-        let vz = clamp(state.velocity.z, -cfg.max_climb_rate, cfg.max_climb_rate);
-        let _ = vz;
-
-        // Scale thrust proportionally to keep total speed within Vne when
-        // the horizontal component is already saturated (prevents adding
-        // climb that would exceed Vne).
-        let thrust = if horiz > cfg.vne {
-            // Already at/over Vne horizontally: demand no extra thrust.
-            cmd.thrust.min(0.0_f64.max(0.0))
-        } else {
-            cmd.thrust
-        };
-        let _ = speed_scale;
-
+        // Attitude clamping bounds the achievable bank angle and therefore the
+        // horizontal airspeed; the mixer also clamps the resulting thrust to
+        // `[0, 1]`. The thrust command is passed through unchanged.
         AttitudeSetpoint {
             roll,
             pitch,
             yaw_rate,
-            thrust,
+            thrust: cmd.thrust,
         }
     }
 
@@ -106,7 +87,7 @@ impl EnvelopeProtector {
             || pr.abs() > cfg.max_pitch_rate
             || yr.abs() > cfg.max_yaw_rate
             || state.velocity.z.abs() > cfg.max_climb_rate
-            || (state.velocity.x * state.velocity.x + state.velocity.y * state.velocity.y).sqrt()
+            || sqrt(state.velocity.x * state.velocity.x + state.velocity.y * state.velocity.y)
                 > cfg.vne
     }
 

@@ -33,6 +33,6 @@ pub mod state;
 pub use pid::Pid;
 pub use envelope::{EnvelopeConfig, EnvelopeProtector};
 pub use scheduler::TimeTriggeredScheduler;
-pub use fsm::{FlightMode, FlightStateMachine};
+pub use fsm::{FlightEvent, FlightMode, FlightStateMachine};
 pub use control::AttitudeController;
 pub use state::{AttitudeSetpoint, VehicleState, VelocitySetpoint};

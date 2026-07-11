@@ -44,7 +44,7 @@ pub struct CameraIntrinsics {
 }
 
 /// Metadata returned alongside a captured camera frame.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub struct FrameMetadata {
     pub sequence: u64,
     pub width: u32,

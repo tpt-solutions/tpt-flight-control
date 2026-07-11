@@ -130,11 +130,12 @@ mod tests {
         let cfg = PidConfig::new(1.0, 0.5, 0.0);
         let mut pid = Pid::new(cfg);
         let mut y = 0.0f64;
-        for _ in 0..2000 {
+        // Pure-integrator plant dy/dt = u; PI needs several seconds to settle.
+        for _ in 0..20_000 {
             let out = pid.update(1.0 - y, y, 0.001);
-            y += out * 0.001; // simple plant: dy/dt = u
+            y += out * 0.001;
         }
-        assert!((y - 1.0).abs() < 0.05, "settled at {y}");
+        assert!((y - 1.0).abs() < 0.02, "settled at {y}");
     }
 
     #[test]

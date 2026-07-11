@@ -57,11 +57,7 @@ pub struct KalmanFilter<const S: usize, const M: usize> {
     r: SMatrix<f64, M, M>,
 }
 
-impl<const S: usize, const M: usize> KalmanFilter<const S, const M>
-where
-    [(); S * S]:,
-    [(); M * M]:,
-{
+impl<const S: usize, const M: usize> KalmanFilter<S, M> {
     /// Create a filter from initial state, covariance, process noise `Q`, and
     /// measurement noise `R`.
     pub fn new(
@@ -132,18 +128,18 @@ mod tests {
         let mut kf = KalmanFilter::<2, 1>::new(x0, p0, q, r);
 
         let dt = 0.01;
-        // Constant-velocity model: x_{k+1} = x_k + v*dt
         let f = SMatrix::<f64, 2, 2>::from_row_slice(&[1.0, dt, 0.0, 1.0]);
+        let h = SMatrix::<f64, 1, 2>::from_row_slice(&[1.0, 0.0]);
 
         let mut truth = 0.0f64;
-        for step in 0..200 {
+        for step in 0..1000 {
             truth += dt; // velocity = 1.0
             kf.predict(&f);
-            let z = SVector::<f64, 1>::new(truth + (step as f64 * 0.013).sin() * 0.3);
-            let h = SMatrix::<f64, 1, 2>::from_row_slice(&[1.0, 0.0]);
+            // Deterministic, slowly varying observation error (kept small).
+            let z = SVector::<f64, 1>::new(truth + (step as f64 * 0.013).sin() * 0.1);
             let _ = kf.update(&h, &z);
         }
-        assert!((kf.state()[0] - truth).abs() < 0.1, "pos err {}", kf.state()[0] - truth);
-        assert!((kf.state()[1] - 1.0).abs() < 0.1, "vel err {}", kf.state()[1] - 1.0);
+        assert!((kf.state()[0] - truth).abs() < 0.05, "pos err {}", kf.state()[0] - truth);
+        assert!((kf.state()[1] - 1.0).abs() < 0.05, "vel err {}", kf.state()[1] - 1.0);
     }
 }

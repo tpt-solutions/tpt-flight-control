@@ -9,3 +9,4 @@ description = "AHRS and sensor fusion (complementary filter, EKF) for TPT Flight
 [dependencies]
 tpt-math.workspace = true
 tpt-abstractions.workspace = true
+libm = "0.2"

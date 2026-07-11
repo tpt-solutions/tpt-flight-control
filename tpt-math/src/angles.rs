@@ -45,8 +45,9 @@ mod tests {
     #[test]
     fn wrap_pi_basic() {
         assert!((wrap_pi(0.0)).abs() < 1e-12);
+        // 3π wraps to +π (range is (-π, π]).
         assert!((wrap_pi(3.0 * core::f64::consts::PI) - core::f64::consts::PI).abs() < 1e-12);
-        assert!((wrap_pi(-3.0 * core::f64::consts::PI) + core::f64::consts::PI).abs() < 1e-12);
+        assert!((wrap_pi(-3.0 * core::f64::consts::PI) - core::f64::consts::PI).abs() < 1e-12);
     }
 
     #[test]

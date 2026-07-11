@@ -4,7 +4,7 @@
 //! calls [`TimeTriggeredScheduler::poll`] with the current monotonic time;
 //! the returned [`RateGroups`] indicates which groups are due this pass.
 
-use tpt_abstractions::os::{RateGroup, RateGroups, RATE_GROUP_PERIOD_US};
+use tpt_abstractions::os::{RateGroup, RateGroups};
 
 /// Stateful time-triggered scheduler. No allocation; fixed per-group state.
 #[derive(Debug, Clone, Copy)]

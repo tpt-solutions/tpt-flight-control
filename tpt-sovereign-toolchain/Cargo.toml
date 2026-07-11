@@ -6,4 +6,8 @@ license.workspace = true
 rust-version.workspace = true
 description = "Custom qualified compiler wrapper for the TPT Sovereign stack"
 
+[features]
+# Marks builds using the formally verified compiler subset (§13, §16).
+verified-subset = []
+
 [dependencies]

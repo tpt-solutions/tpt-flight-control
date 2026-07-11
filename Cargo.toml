@@ -35,6 +35,9 @@ tpt-core = { path = "tpt-core", version = "0.2.0" }
 tpt-mixer = { path = "tpt-mixer", version = "0.2.0" }
 tpt-sensor-fusion = { path = "tpt-sensor-fusion", version = "0.2.0" }
 tpt-mapping = { path = "tpt-mapping", version = "0.2.0" }
+tpt-protocols = { path = "tpt-protocols", version = "0.2.0" }
+tpt-gcs = { path = "tpt-gcs", version = "0.2.0" }
+tpt-sim = { path = "tpt-sim", version = "0.2.0" }
 
 # Verified-friendly linear algebra. nalgebra compiles `no_std` via the
 # `libm` feature (see each core crate's Cargo.toml).
