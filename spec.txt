@@ -1,0 +1,523 @@
+# TPT Flight Control — Comprehensive Design Document
+
+**Version:** 0.2.0-DRAFT
+**Date:** July 11, 2026
+**License:** Apache License 2.0
+**Status:** Architecture & Design Phase
+
+---
+
+## Table of Contents
+
+1. [Executive Summary](#1-executive-summary)
+2. [Purpose & Vision](#2-purpose--vision)
+3. [Design Principles](#3-design-principles)
+4. [System Architecture](#4-system-architecture)
+5. [Core Trait Abstractions](#5-core-trait-abstractions)
+6. [Flight Control Law Engine](#6-flight-control-law-engine)
+7. [Sensor Fusion Subsystem](#7-sensor-fusion-subsystem)
+8. [Onboard Mapping & GPS-Denied Navigation](#8-onboard-mapping--gps-denied-navigation)
+9. [Actuator Mixing & Propulsion](#9-actuator-mixing--propulsion)
+10. [Hardware Abstraction Layer (HAL)](#10-hardware-abstraction-layer-hal)
+11. [Operating System Abstraction](#11-operating-system-abstraction)
+12. [Communication & Telemetry](#12-communication--telemetry)
+13. [Dual-Stack Compilation Model](#13-dual-stack-compilation-model)
+14. [Simulation Environment (SITL/HITL)](#14-simulation-environment-sitlhitl)
+15. [Tech Stack](#15-tech-stack)
+16. [Certification & Compliance Pathway](#16-certification--compliance-pathway)
+17. [Repository Structure](#17-repository-structure)
+18. [Development Roadmap](#18-development-roadmap)
+19. [Security Model](#19-security-model)
+20. [Open Source Governance](#20-open-source-governance)
+21. [Appendices](#21-appendices)
+
+---
+
+## 1. Executive Summary
+
+**TPT Flight Control** is an open-source (Apache 2.0), vertically integrated flight control software platform written in Rust. It is designed to operate across the full spectrum of airborne vehicles—from basic hobby drones to commercial airliners—using a single, unified Rust codebase.
+
+The system achieves this through a **trait-based abstraction architecture** that decouples pure mathematical flight control logic from hardware, operating system, and certification-layer concerns. Conditional compilation via Cargo feature flags enables the same core code to be deployed as a lightweight bare-metal drone firmware or a fully partitioned, DO-178C-certified avionics suite.
+
+TPT Flight Control operates on a **dual-stack model**:
+- **TPT Standard:** Compiles against the qualified Ferrocene Rust toolchain with industry-standard RTOS integrations (PikeOS, VxWorks, Zephyr).
+- **TPT Sovereign:** Compiles against a fully vertically integrated, formally verified stack including a custom microkernel, verified compiler subset wrapper, and mathematically proven core libraries.
+
+Crucially, TPT includes a comprehensive **Onboard Mapping and GPS-Denied Navigation** subsystem, allowing vehicles to navigate, map, and avoid obstacles in environments where GNSS is degraded, jammed, or entirely non-existent (e.g., urban canyons, indoors, subterranean, or electronic warfare environments).
+
+The initial target market is **electric Vertical Takeoff and Landing (eVTOL) vehicles and Advanced Air Mobility (AAM)**, with a downward-compatible path to consumer drones and an upward-compatible path to commercial aviation via Tier-1 avionics suppliers.
+
+---
+
+## 2. Purpose & Vision
+
+### 2.1 Problem Statement
+
+The aerospace software industry suffers from:
+- **Legacy monoculture:** Flight control systems are predominantly written in C/C++ with codebases dating back 20-40 years.
+- **Memory unsafety:** Buffer overflows, use-after-free, and null pointer dereferences remain the dominant class of vulnerabilities in avionics software.
+- **GPS Vulnerability:** Modern aviation is overly reliant on GNSS. Jamming, spoofing, and signal degradation in urban environments pose catastrophic risks to autonomous and fly-by-wire systems.
+- **eVTOL gap:** Existing avionics architectures were designed for 2-3 actuators and cannot efficiently manage the 8-24+ distributed electric motors of modern eVTOLs.
+- **No open standard:** There is no modern, open-source, certification-ready flight control framework that spans from drones to transport-category aircraft.
+
+### 2.2 Vision
+
+TPT Flight Control will become the foundational open-source software platform for the next generation of aviation by:
+1. Providing a **mathematically rigorous, memory-safe** flight control core written in Rust.
+2. Scaling from a $20 microcontroller in a hobby drone to a $100,000 certified avionics suite in a commercial aircraft.
+3. Ensuring **continuous navigation capability** in GPS-denied environments through advanced onboard mapping, Visual-Inertial Odometry (VIO), and Terrain-Aided Navigation (TAN).
+4. Enabling **supply chain sovereignty** through the TPT Sovereign stack for defense and national security applications.
+5. Accelerating eVTOL and AAM adoption by providing an open, high-performance distributed propulsion controller.
+
+### 2.3 Target Vehicle Classes
+
+| Class | Example | Actuators | DO-178C DAL | TPT Profile |
+|---|---|---|---|---|
+| Micro Drone | DJI Mini | 4 motors | None | `tpt-micro` |
+| sUAS / Part 107 | Custom quadcopter | 4-8 motors | None / DAL-D | `tpt-drone` |
+| UAS / Group 3-5 | MQ-9 Reaper class | 4-8 + surfaces | DAL-C / DAL-B | `tpt-uas` |
+| eVTOL / AAM | Joby, Archer | 8-24 motors | DAL-B / DAL-A | `tpt-evtol` |
+| Regional / Commuter | ATR, Embraer | Surfaces + engines | DAL-A | `tpt-regional` |
+| Transport Category | Boeing 737, A320 | Surfaces + engines | DAL-A | `tpt-transport` |
+
+---
+
+## 3. Design Principles
+
+1. **One Codebase, Many Targets:** All flight control logic exists in a single Rust workspace. Vehicle class and certification level are determined at compile time via feature flags.
+2. **`no_std` Core:** The flight control core must compile in a `#![no_std]` environment with zero heap allocation by default. All memory is statically allocated or pool-allocated.
+3. **Trait-Based Decoupling:** Every external dependency (hardware, OS, sensor, actuator, spatial map) is accessed exclusively through Rust traits. 
+4. **Deterministic Execution:** All control loops execute within bounded, provable time limits. No unbounded loops, no dynamic allocation in hot paths, no panics in flight-critical code.
+5. **Fail-Safe & GPS-Independent:** The system must never rely solely on GNSS. If GPS is lost, the system seamlessly transitions to onboard mapping, VIO, or TAN to maintain safe flight or execute a safe landing.
+6. **Formal Verification Ready:** The core mathematical libraries are structured to be compatible with formal verification tools (Kani, Creusot, Aeneas) from day one.
+7. **Open by Default, Certified by Service:** The source code is Apache 2.0. The certification artifacts and proprietary map databases are the commercial product.
+
+---
+
+## 4. System Architecture
+
+### 4.1 Layered Architecture Overview
+
+```text
+┌─────────────────────────────────────────────────────────┐
+│                   APPLICATION LAYER                     │
+│  Mission Planner │ Autopilot │ Flight Envelope Protect  │
+├─────────────────────────────────────────────────────────┤
+│                 FLIGHT CONTROL CORE                     │
+│  Control Laws │ State Machine │ Fault Detection & Mgmt │
+├─────────────────────────────────────────────────────────┤
+│      SENSOR FUSION & GPS-DENIED NAVIGATION ENGINE       │
+│  IMU │ GNSS │ VIO │ LiDAR SLAM │ TAN │ Onboard Mapping │
+├─────────────────────────────────────────────────────────┤
+│              ACTUATOR MIXING ENGINE                     │
+│  Motor Mixing │ Control Surface │ Thrust Vectoring      │
+├─────────────────────────────────────────────────────────┤
+│            ABSTRACTION LAYER (Traits)                   │
+│  HAL Trait │ OS Trait │ Comms Trait │ Spatial Map Trait │
+├─────────────────────────────────────────────────────────┤
+│                  BACKEND LAYER                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │   tpt-micro  │  │ tpt-standard │  │ tpt-sovereign│  │
+│  │ (Drone/Bare) │  │ (Ferrocene)  │  │  (Verified)  │  │
+│  └──────────────┘  └──────────────┘  └──────────────┘  │
+├─────────────────────────────────────────────────────────┤
+│                   HARDWARE                              │
+│  STM32 │ NXP S32K │ TI TMS570 │ Xilinx Zynq │ Jetson  │
+└─────────────────────────────────────────────────────────┘
+4.2 Execution Model
+TPT uses a time-triggered, rate-group execution model:
+Rate Group 1 (Inner Loop): 1000 Hz (1ms) — IMU read, attitude estimation, rate control
+Rate Group 2 (Outer Loop): 200 Hz (5ms) — Position/velocity control, navigation, VIO update
+Rate Group 3 (Guidance & Mapping): 50 Hz (20ms) — Waypoint following, SLAM keyframe insertion, map culling
+Rate Group 4 (Telemetry): 10 Hz (100ms) — Logging, telemetry, health monitoring
+Rate Group 5 (Background): 1 Hz (1000ms) — Configuration, battery management, diagnostics
+4.3 Redundancy Architecture
+TPT Profile
+Redundancy Model
+Voting
+tpt-micro / tpt-drone
+Single channel
+None
+tpt-uas
+Dual channel (Active/Standby)
+Simple comparison
+tpt-evtol
+Triple channel
+Mid-value select
+tpt-regional / tpt-transport
+Triple or Quad channel dissimilar
+Consensus + dissimilar monitor
+5. Core Trait Abstractions
+These traits define the contract between the platform-independent core and the platform-specific backends.
+5.1 Hardware & Sensor Abstraction Traits
+/// Inertial Measurement Unit
+pub trait Imu {
+    type Error;
+    fn read_accelerometer(&mut self) -> Result<Vector3<f64>, Self::Error>;
+    fn read_gyroscope(&mut self) -> Result<Vector3<f64>, Self::Error>;
+    fn read_magnetometer(&mut self) -> Result<Vector3<f64>, Self::Error>;
+}
+
+/// Global Navigation Satellite System
+pub trait Gnss {
+    type Error;
+    fn read_position(&mut self) -> Result<GeoPosition, Self::Error>;
+    fn read_velocity(&mut self) -> Result<Vector3<f64>, Self::Error>;
+    fn get_fix_type(&self) -> FixType;
+    fn is_jammed_or_spoofed(&self) -> bool; // Anti-spoofing integrity check
+}
+
+/// Visual / Camera Sensor (for VIO and Mapping)
+pub trait VisualSensor {
+    type Error;
+    fn capture_frame(&mut self, buffer: &mut [u8]) -> Result<FrameMetadata, Self::Error>;
+    fn get_intrinsics(&self) -> &CameraIntrinsics;
+}
+
+/// LiDAR / Depth Sensor
+pub trait LidarSensor {
+    type Error;
+    fn read_point_cloud(&mut self, buffer: &mut [Point3D]) -> Result<usize, Self::Error>;
+}
+
+/// Radar Altimeter (Critical for Terrain-Aided Navigation)
+pub trait RadarAltimeter {
+    type Error;
+    fn read_altitude_agl(&mut self) -> Result<f64, Self::Error>;
+}
+5.2 Spatial Mapping & Memory Traits
+/// Onboard Spatial Map (GPS-Denied Navigation)
+pub trait SpatialMap {
+    type Error;
+    
+    /// Insert a new observation into the map
+    fn insert_keyframe(&mut self, pose: Pose6DOF, landmarks: &[Landmark]) -> Result<(), Self::Error>;
+    
+    /// Query the map for obstacles in a given bounding box
+    fn query_obstacles(&self, bbox: &BoundingBox) -> Result<Vec<Point3D, MAX_OBSTACLES>, Self::Error>;
+    
+    /// Get the current estimated pose relative to the map origin
+    fn get_local_pose(&self) -> Result<Pose6DOF, Self::Error>;
+    
+    /// Cull old map data to free memory (sliding window)
+    fn cull_distant_data(&mut self, current_pos: Point3D, max_radius: f64);
+}
+
+/// Terrain Database (for TAN / TERCOM)
+pub trait TerrainDatabase {
+    type Error;
+    /// Lookup elevation at a given Lat/Lon
+    fn get_elevation(&self, lat: f64, lon: f64) -> Result<f64, Self::Error>;
+    /// Get a grid of elevations for correlation matching
+    fn get_terrain_patch(&self, center: GeoPosition, radius_m: f64) -> Result<TerrainGrid, Self::Error>;
+}
+5.3 Actuator & OS Traits
+(Includes standard Motor, ControlSurface, Scheduler, PartitionChannel, MemoryPool, and PowerSystem traits as defined in standard embedded avionics architectures, ensuring no_std compliance and ARINC 653 partitioning support.)
+6. Flight Control Law Engine
+6.1 Control Loop Architecture
+The flight control engine uses a cascaded control architecture:
+Pilot / Autopilot Command
+        │
+        ▼
+┌─────────────────────┐
+│  GUIDANCE LOOP      │  50 Hz  — Waypoint, altitude, heading targets
+└────────┬────────────┘
+         │ Desired velocities / accelerations
+         ▼
+┌─────────────────────┐
+│  NAVIGATION LOOP    │  200 Hz — Velocity, position hold, approach
+└────────┬────────────┘
+         │ Desired angles / rates
+         ▼
+┌─────────────────────┐
+│  ATTITUDE LOOP      │  200 Hz — Roll, pitch, yaw angle control
+└────────┬────────────┘
+         │ Desired angular rates
+         ▼
+┌─────────────────────┐
+│  RATE LOOP          │  1000 Hz — Gyro-rate stabilization (inner loop)
+└────────┬────────────┘
+         │ Corrective moments / forces
+         ▼
+┌─────────────────────┐
+│  MIXER              │  1000 Hz — Actuator allocation
+└─────────────────────┘
+6.2 Supported Controller Types
+PID: Classical Proportional-Integral-Derivative with anti-windup.
+LQR: Linear Quadratic Regulator for optimal multi-variable control.
+Adaptive / MRAC: Model Reference Adaptive Control for vehicles with changing dynamics (fuel burn, motor failure).
+MPC: Model Predictive Control for constrained optimization (actuator limits, envelope protection, obstacle avoidance).
+6.3 Flight Envelope Protection
+A hard-coded, non-bypassable envelope protection layer sits between the control laws and the mixer, enforcing maximum pitch/roll, stall protection (AoA), Vne, and minimum energy states.
+7. Sensor Fusion Subsystem
+7.1 Attitude and Heading Reference System (AHRS)
+Algorithms (pluggable via trait):
+Complementary Filter: Lightweight, suitable for tpt-micro.
+Madgwick / Mahony: Quaternion-based, low computational cost.
+Extended Kalman Filter (EKF): Full state estimation. Required for tpt-uas and above.
+7.2 GPS-Degraded Fusion Strategy
+When GNSS integrity is lost (jamming, spoofing, or signal blockage), the EKF automatically reconfigures its measurement matrix:
+Phase 1 (Coast): Rely purely on high-grade IMU dead-reckoning.
+Phase 2 (Visual/Depth Aided): Inject Visual-Inertial Odometry (VIO) or LiDAR odometry measurements into the EKF to arrest position drift.
+Phase 3 (Terrain Aided): If altitude/terrain features are available, inject Terrain-Aided Navigation (TAN) corrections.
+8. Onboard Mapping & GPS-Denied Navigation
+This subsystem ensures TPT can operate in "denied" environments (urban canyons, indoors, subterranean, or under electronic warfare).
+8.1 Navigation Modalities
+Visual-Inertial Odometry (VIO):
+Fuses camera frames with IMU data to estimate relative pose.
+Uses feature tracking (e.g., FAST/ORB corners) or direct image alignment.
+Implementation: Runs on the main flight controller for simple setups, or offloaded to a companion computer (e.g., NVIDIA Jetson) for dense VIO, passing only the pose estimate back to the core via the SpatialMap trait.
+LiDAR SLAM (Simultaneous Localization and Mapping):
+Uses 3D LiDAR point clouds to build a high-fidelity map of the environment.
+Utilizes Iterative Closest Point (ICP) or NDT (Normal Distributions Transform) for scan matching.
+Essential for eVTOLs operating in low-visibility (fog, night) or complex 3D urban environments.
+Terrain-Aided Navigation (TAN) / TERCOM:
+Compares real-time radar altimeter readings and terrain gradients against a pre-loaded Digital Elevation Model (DEM).
+Uses particle filters or batch correlation to determine absolute position without GPS.
+Highly resilient to jamming; relies on passive radar and stored map data.
+8.2 Onboard Map Representation
+Maps must be memory-efficient to comply with the no_std / embedded constraints.
+Sparse Voxel Octrees (SVO) / Octomaps: Represents 3D space efficiently. Only occupied or "free" space is stored. Ideal for LiDAR SLAM and obstacle avoidance.
+Pose Graph / Keyframe Map: For VIO, the map is not a dense 3D grid, but a graph of "keyframes" (camera poses + sparse 3D landmarks). Loop closure algorithms correct drift over time.
+Topological Maps: For high-level path planning in GPS-denied areas, the vehicle reduces the metric map to a graph of "nodes" (waypoints/corridors) and "edges" (safe paths), drastically reducing compute requirements for the guidance loop.
+8.3 Memory & Compute Management
+Sliding Window Optimization: The SLAM/VIO backend only optimizes the last N seconds of data (e.g., a 10-second sliding window). Older keyframes are marginalized out to bound memory usage.
+Map Culling: The SpatialMap trait includes a cull_distant_data method. As the vehicle moves forward, the map behind it is deleted from RAM to prevent memory exhaustion.
+Companion Compute Offload: For heavy 3D mapping, the tpt-core remains lightweight. A companion computer runs the heavy SLAM algorithms (in C++/Rust) and publishes a lightweight "Local Pose + Obstacle Cloud" to the flight controller over a high-speed internal bus (e.g., Ethernet/UDP or PCIe).
+9. Actuator Mixing & Propulsion
+9.1 Distributed Electric Propulsion (DEP) Mixer
+Translates desired forces and moments into individual motor commands. Includes fault-tolerant reallocation: upon motor failure, automatically recomputes the mixing matrix using pseudo-inverse or quadratic programming to maintain controllability.
+9.2 Mixer Strategies
+Fixed-wing standard, Multirotor (Quad/Hexa/Octo), Tilt-rotor eVTOL (hover-to-cruise transition), Lift + Cruise, and Vectored thrust.
+10. Hardware Abstraction Layer (HAL)
+10.1 Supported Hardware Families
+Target Class
+MCU / SoC
+Use Case
+TPT Profile
+Entry
+STM32F4/F7/H7
+Hobby drones, development
+tpt-micro, tpt-drone
+Mid
+NXP S32K3, TI TMS570
+UAS, industrial drones
+tpt-uas
+High
+Xilinx Zynq (ARM+FPGA)
+eVTOL, certified UAS
+tpt-evtol
+AI/Perception
+NVIDIA Jetson / Orin
+Vision/LiDAR SLAM, VIO
+Companion computer
+Transport
+PowerPC, ARM Cortex-R52
+Regional/Transport
+tpt-regional, tpt-transport
+11. Operating System Abstraction
+11.1 OS Backends
+Backend
+OS / Runtime
+TPT Profile
+Certification
+bare-metal
+Superloop / simple timer interrupt
+tpt-micro
+None
+freertos
+FreeRTOS
+tpt-drone
+None / DAL-D
+zephyr
+Zephyr RTOS
+tpt-drone, tpt-uas
+IEC 61508 SIL-2
+pikeos
+SYSGO PikeOS
+tpt-evtol, tpt-regional
+DO-178C DAL-A, ARINC 653
+vxworks
+Wind River VxWorks
+tpt-evtol, tpt-transport
+DO-178C DAL-A
+sel4
+seL4 microkernel
+tpt-sovereign
+Common Criteria EAL7+
+12. Communication & Telemetry
+12.1 Protocols
+MAVLink v2: For drone and UAS profiles.
+TPT-Link: Rust-native, zero-copy binary protocol for high-performance eVTOL telemetry.
+ARINC 429 / AFDX: For transport category integration.
+12.2 Telemetry Data Model
+Includes standard flight telemetry plus Navigation Health:
+pub struct NavHealth {
+    pub gnss_status: GnssIntegrity,
+    pub vio_confidence: f64,       // 0.0 to 1.0
+    pub lidar_slam_status: SlamHealth,
+    pub tan_status: TerrainAidHealth,
+    pub active_nav_mode: NavMode,  // GPS, VIO, SLAM, TAN, DeadReckoning
+    pub map_memory_used_bytes: u32,
+}
+13. Dual-Stack Compilation Model
+13.1 Cargo Workspace & Feature Flags
+[features]
+default = ["stack-bare-metal"]
+stack-bare-metal = ["tpt-backend-bare-metal"]
+stack-ferrocene = ["tpt-backend-pikeos", "tpt-verified-subset"]
+stack-sovereign = ["tpt-backend-sel4", "tpt-sovereign-toolchain", "tpt-verified-subset"]
+
+vehicle-drone = ["mixer-quad", "fusion-madgwick"]
+vehicle-evtol = ["mixer-dep", "fusion-ekf", "arinc653", "gps-denied-nav"]
+vehicle-transport = ["mixer-surface", "fusion-ekf", "arinc653", "triple-redundancy", "tan-nav"]
+
+gps-denied-nav = ["tpt-vio", "tpt-slam-lite"]
+tan-nav = ["tpt-tercom"]
+14. Simulation Environment (SITL/HITL)
+14.1 GPS-Denied Simulation
+tpt-sim includes specific scenarios for testing the mapping and GPS-denied subsystems:
+Urban Canyon: Simulates GNSS multipath and dropouts while navigating between virtual skyscrapers.
+Electronic Warfare: Simulates total GNSS jamming and spoofing attacks.
+Indoor/Subterranean: Simulates GPS-denied environments requiring LiDAR SLAM or VIO for navigation.
+Sensor Degradation: Injects camera glare, LiDAR dropouts, and radar altimeter noise.
+15. Tech Stack
+15.1 Core Languages & Tools
+Primary Language: Rust (2024 edition)
+Verified Subset: Rust + Kani / Creusot
+Compiler (Standard): Ferrocene
+Compiler (Sovereign): rustc + custom LLVM passes
+15.2 Embedded & RTOS
+PAC/HAL Crates: stm32-rs, nrf-hal, custom TI/NXP PACs
+RTOS: FreeRTOS, Zephyr, PikeOS, VxWorks, seL4
+Async Runtime: Embassy (for non-flight-critical tasks)
+15.3 Math, Control & Mapping
+Component
+Technology
+Linear Algebra
+nalgebra (with no_std feature)
+Kalman Filters
+Custom implementation (for formal verification)
+VIO / Visual SLAM
+Custom Rust implementation or bindings to ORB-SLAM3 (via FFI on companion compute)
+LiDAR SLAM
+Custom NDT / ICP implementation (no_std compatible core)
+3D Spatial Maps
+octree-rs (custom sparse voxel octree implementation)
+Terrain Matching
+Custom TERCOM correlation algorithms
+15.4 Communication & Ground Station
+MAVLink: mavlink crate
+Serialization: postcard
+Ground Station: tpt-gcs (Rust + egui or iced)
+Web Dashboard: tpt-web (Rust wasm + leptos)
+16. Certification & Compliance Pathway
+16.1 Applicable Standards
+DO-178C / DO-330 / DO-332 / DO-333: Software certification and formal methods.
+DO-326A: Airworthiness security (critical for GPS anti-spoofing and map data integrity).
+ARP 4754A / ARP 4761: System safety assessment.
+16.2 GPS-Denied Certification Strategy
+Certifying a GPS-denied navigation system requires proving that the probability of catastrophic failure due to navigation loss is below 10^-9 per flight hour (for DAL-A). TPT achieves this through:
+Dissimilar Redundancy: Using VIO (camera-based) and TAN (radar/terrain-based) as dissimilar backups to GNSS.
+Formal Verification: Mathematically proving the bounds of the EKF and TERCOM correlation algorithms.
+Integrity Monitoring: Continuous innovation monitoring (checking if the map/visual features match the IMU predictions).
+17. Repository Structure
+tpt-flight-control/
+├── Cargo.toml
+├── tpt-core/                     # Flight control laws, state machine, envelope protection
+├── tpt-math/                     # Verified math library (matrices, quaternions, kalman)
+├── tpt-sensor-fusion/            # AHRS, EKF, UKF, sensor health monitoring
+├── tpt-mapping/                  # NEW: Onboard mapping, VIO, LiDAR SLAM, TAN/TERCOM
+│   ├── src/
+│   │   ├── vio/                  # Visual-Inertial Odometry
+│   │   ├── slam/                 # LiDAR/Vision SLAM keyframe management
+│   │   ├── tan/                  # Terrain-Aided Navigation (TERCOM)
+│   │   └── octree/               # Sparse Voxel Octree memory management
+├── tpt-mixer/                    # Actuator mixing, DEP, fault reallocation
+├── tpt-abstractions/             # Trait definitions (HAL, OS, SpatialMap, TerrainDB)
+├── tpt-backend-bare-metal/       # Bare-metal backend (STM32, etc.)
+├── tpt-backend-freertos/         # FreeRTOS backend
+├── tpt-backend-zephyr/           # Zephyr backend
+├── tpt-backend-pikeos/           # PikeOS backend (Ferrocene path)
+├── tpt-backend-sel4/             # seL4 backend (Sovereign path)
+├── tpt-sovereign-toolchain/      # Custom compiler qualification wrapper
+├── tpt-sim/                      # Physics simulator + SITL (includes GPS-denied scenarios)
+├── tpt-gcs/                      # Ground Control Station (desktop)
+├── tpt-protocols/                # MAVLink, TPT-Link, ARINC429
+├── reference-hardware/           # Open-hardware flight computer designs (KiCad)
+├── certification/                # DO-178C artifacts (commercial)
+└── docs/                         # Architecture, tutorials, API docs
+18. Development Roadmap
+Phase 0: Foundation (Months 1-3)
+Define traits in tpt-abstractions (including SpatialMap and VisualSensor)
+Implement tpt-math and basic PID controller
+Implement complementary filter AHRS and quadcopter mixer
+Build basic SITL
+Milestone: Virtual quadcopter hovers in simulation.
+Phase 1: First Flight & Basic Drones (Months 4-9)
+Implement bare-metal STM32 backend
+Flash to real hardware, achieve stable hover
+Add GPS navigation, MAVLink, and basic GCS
+Milestone: TPT flies a real drone.
+Phase 2: GPS-Denied & Mapping (Months 10-15)
+Implement Visual-Inertial Odometry (VIO) in tpt-mapping
+Implement Sparse Voxel Octree for lightweight obstacle mapping
+Integrate VIO into the EKF for GPS-fallback navigation
+Test in SITL urban canyon / GPS-jamming scenarios
+Milestone: Drone successfully navigates and avoids obstacles with GPS turned off.
+Phase 3: eVTOL & LiDAR SLAM (Year 2)
+Implement DEP mixer and tilt-rotor transition
+Implement LiDAR SLAM backend for high-fidelity 3D mapping
+Implement Terrain-Aided Navigation (TAN) for high-altitude/defense use
+Begin DO-178C DAL-C process with an eVTOL partner
+Milestone: TPT flies a crewed eVTOL prototype using onboard mapping.
+Phase 4: Certification & Sovereign Stack (Years 3-4)
+Achieve DO-178C DAL-C/B certification
+Implement seL4 Sovereign backend
+Formal verification of tpt-math and tpt-mapping using Kani
+Milestone: TPT Sovereign stack demonstrated for defense application.
+Phase 5: Transport Category (Years 5+)
+Triple-redundant, dissimilar architecture (including dissimilar nav sources)
+Achieve DO-178C DAL-A
+Milestone: TPT integrated into a transport-category aircraft.
+19. Security Model
+19.1 Cybersecurity & Anti-Spoofing
+GNSS Integrity: Continuous monitoring of GNSS signals for spoofing/jamming (e.g., signal strength anomalies, inconsistent Doppler shifts).
+Map Data Integrity: Onboard terrain databases and map data are cryptographically signed to prevent malicious map injection.
+Encryption: All communication links use authenticated encryption (ChaCha20-Poly1305).
+19.2 Supply Chain Security
+All Rust dependencies vendored and audited. SBOM generated for every release. Reproducible builds.
+20. Open Source Governance
+License: Apache License 2.0 for all source code and reference hardware.
+Commercial Products: DO-178C data packages, proprietary high-fidelity terrain databases, and certified companion-compute SLAM binaries.
+Contribution: DCO sign-off required. Flight-critical and mapping-critical code requires domain-expert review.
+21. Appendices
+Appendix A: Glossary
+Term
+Definition
+AFDX
+Avionics Full-Duplex Switched Ethernet
+DAL
+Design Assurance Level (DO-178C)
+DEM
+Digital Elevation Model
+DEP
+Distributed Electric Propulsion
+EKF
+Extended Kalman Filter
+eVTOL
+Electric Vertical Takeoff and Landing
+GNSS
+Global Navigation Satellite System (GPS, Galileo, etc.)
+NDT
+Normal Distributions Transform (LiDAR scan matching)
+SLAM
+Simultaneous Localization and Mapping
+TAN
+Terrain-Aided Navigation
+TERCOM
+Terrain Contour Matching
+VIO
+Visual-Inertial Odometry
+Vne
+Velocity Never Exceed
