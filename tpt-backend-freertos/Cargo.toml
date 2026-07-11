@@ -1,0 +1,11 @@
+[package]
+name = "tpt-backend-freertos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "FreeRTOS backend for TPT Flight Control (tpt-drone profile)"
+
+[dependencies]
+tpt-abstractions.workspace = true
+tpt-core.workspace = true

@@ -1,0 +1,11 @@
+[package]
+name = "tpt-backend-sel4"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "seL4 microkernel backend for TPT Sovereign stack"
+
+[dependencies]
+tpt-abstractions.workspace = true
+tpt-core.workspace = true

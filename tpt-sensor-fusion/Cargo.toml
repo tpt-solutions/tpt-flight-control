@@ -1,0 +1,11 @@
+[package]
+name = "tpt-sensor-fusion"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "AHRS and sensor fusion (complementary filter, EKF) for TPT Flight Control"
+
+[dependencies]
+tpt-math.workspace = true
+tpt-abstractions.workspace = true

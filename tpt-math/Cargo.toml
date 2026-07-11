@@ -1,0 +1,10 @@
+[package]
+name = "tpt-math"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Verified-friendly, no_std math library for TPT Flight Control (vectors, quaternions, Kalman)"
+
+[dependencies]
+nalgebra.workspace = true

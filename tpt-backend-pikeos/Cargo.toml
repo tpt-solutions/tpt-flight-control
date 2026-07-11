@@ -1,0 +1,11 @@
+[package]
+name = "tpt-backend-pikeos"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "PikeOS (ARINC 653) backend for TPT Flight Control (tpt-evtol)"
+
+[dependencies]
+tpt-abstractions.workspace = true
+tpt-core.workspace = true

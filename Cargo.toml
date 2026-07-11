@@ -1,0 +1,45 @@
+[workspace]
+resolver = "2"
+members = [
+    "tpt-core",
+    "tpt-math",
+    "tpt-sensor-fusion",
+    "tpt-mapping",
+    "tpt-mixer",
+    "tpt-abstractions",
+    "tpt-backend-bare-metal",
+    "tpt-backend-freertos",
+    "tpt-backend-zephyr",
+    "tpt-backend-pikeos",
+    "tpt-backend-sel4",
+    "tpt-sovereign-toolchain",
+    "tpt-sim",
+    "tpt-gcs",
+    "tpt-protocols",
+    "reference-hardware",
+    "certification",
+    "docs",
+]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+license = "Apache-2.0"
+repository = "https://github.com/tpt-flight-control/tpt-flight-control"
+rust-version = "1.85"
+
+[workspace.dependencies]
+tpt-math = { path = "tpt-math", version = "0.2.0" }
+tpt-abstractions = { path = "tpt-abstractions", version = "0.2.0" }
+tpt-core = { path = "tpt-core", version = "0.2.0" }
+tpt-mixer = { path = "tpt-mixer", version = "0.2.0" }
+tpt-sensor-fusion = { path = "tpt-sensor-fusion", version = "0.2.0" }
+tpt-mapping = { path = "tpt-mapping", version = "0.2.0" }
+
+# Verified-friendly linear algebra. nalgebra compiles `no_std` via the
+# `libm` feature (see each core crate's Cargo.toml).
+nalgebra = { version = "0.33", default-features = false, features = ["libm"] }
+
+[profile.release]
+opt-level = 3
+lto = true

@@ -1,0 +1,11 @@
+[package]
+name = "tpt-gcs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Ground Control Station (egui/iced) for TPT Flight Control"
+
+[dependencies]
+tpt-protocols.workspace = true
+tpt-math.workspace = true

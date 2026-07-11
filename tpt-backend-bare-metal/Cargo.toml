@@ -1,0 +1,11 @@
+[package]
+name = "tpt-backend-bare-metal"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Bare-metal superloop backend (STM32F4/F7/H7) for TPT Flight Control"
+
+[dependencies]
+tpt-abstractions.workspace = true
+tpt-core.workspace = true

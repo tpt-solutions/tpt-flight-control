@@ -1,0 +1,9 @@
+[package]
+name = "tpt-sovereign-toolchain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Custom qualified compiler wrapper for the TPT Sovereign stack"
+
+[dependencies]

@@ -1,0 +1,26 @@
+# CODEOWNERS — domain-expert review requirements
+#
+# Flight-critical and mapping-critical code requires review by a designated
+# domain expert before merge. See CONTRIBUTING.md.
+
+# Flight-critical control laws, envelope protection, scheduler
+/tpt-core/                       @tpt-flight-control/flight-control-experts
+
+# AHRS / EKF / navigation sensor fusion
+/tpt-sensor-fusion/              @tpt-flight-control/navigation-experts
+
+# Actuator allocation and fault reallocation
+/tpt-mixer/                      @tpt-flight-control/propulsion-experts
+
+# Mapping-critical: VIO / SLAM / TAN
+/tpt-mapping/                    @tpt-flight-control/mapping-experts
+
+# Trait contracts relied upon by certified profiles
+/tpt-abstractions/               @tpt-flight-control/architecture-experts
+
+# Certification artifacts must be reviewed by the compliance lead
+/certification/                  @tpt-flight-control/certification-lead
+
+# Security-sensitive: protocols, sovereign toolchain, crypto
+/tpt-protocols/                  @tpt-flight-control/security-experts
+/tpt-sovereign-toolchain/        @tpt-flight-control/security-experts

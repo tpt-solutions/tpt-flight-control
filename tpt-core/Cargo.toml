@@ -1,0 +1,34 @@
+[package]
+name = "tpt-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Flight control laws, state machine, envelope protection, scheduler for TPT Flight Control"
+
+[dependencies]
+tpt-math.workspace = true
+tpt-abstractions.workspace = true
+tpt-mapping = { workspace = true, optional = true }
+
+[features]
+default = []
+# Vehicle profiles (§13.1)
+vehicle-drone = ["mixer-quad", "fusion-madgwick"]
+vehicle-evtol = ["mixer-dep", "fusion-ekf", "gps-denied-nav", "arinc653"]
+vehicle-transport = ["mixer-surface", "fusion-ekf", "gps-denied-nav", "tan-nav", "triple-redundancy"]
+# Mixer strategies (§9.2)
+mixer-quad = []
+mixer-dep = []
+mixer-surface = []
+# Fusion strategies (§7.1)
+fusion-madgwick = []
+fusion-ekf = []
+# GPS-denied navigation and terrain-aided nav (§8)
+gps-denied-nav = ["dep:tpt-mapping"]
+tan-nav = ["dep:tpt-mapping"]
+# Certification-related flags (§11, §4.3)
+arinc653 = []
+triple-redundancy = []
+# Mark this build as using the formally verified subset (§13, §16)
+tpt-verified-subset = []

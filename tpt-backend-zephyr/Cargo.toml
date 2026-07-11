@@ -1,0 +1,11 @@
+[package]
+name = "tpt-backend-zephyr"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Zephyr RTOS backend for TPT Flight Control (tpt-drone/tpt-uas)"
+
+[dependencies]
+tpt-abstractions.workspace = true
+tpt-core.workspace = true

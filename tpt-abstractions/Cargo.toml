@@ -1,0 +1,10 @@
+[package]
+name = "tpt-abstractions"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Trait abstractions (HAL, OS, SpatialMap, TerrainDB) for TPT Flight Control"
+
+[dependencies]
+tpt-math.workspace = true
