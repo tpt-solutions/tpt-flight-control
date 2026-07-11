@@ -94,7 +94,11 @@ impl Pid {
         let d = self.filtered_deriv;
 
         // Tentative output to decide anti-windup.
-        let tentative = clamp(p + self.integral + d, self.cfg.output_min, self.cfg.output_max);
+        let tentative = clamp(
+            p + self.integral + d,
+            self.cfg.output_min,
+            self.cfg.output_max,
+        );
         let saturated = tentative == self.cfg.output_min || tentative == self.cfg.output_max;
 
         // Conditional integration: only accumulate when not saturated, or when
@@ -113,7 +117,11 @@ impl Pid {
         self.prev_measurement = measurement;
         self.initialized = true;
 
-        clamp(p + self.integral + d, self.cfg.output_min, self.cfg.output_max)
+        clamp(
+            p + self.integral + d,
+            self.cfg.output_min,
+            self.cfg.output_max,
+        )
     }
 
     fn kp(&self) -> f64 {

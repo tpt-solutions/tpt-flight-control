@@ -91,13 +91,19 @@ mod tests {
     fn nominal_sequence() {
         let mut fsm = FlightStateMachine::new();
         assert_eq!(fsm.handle(FlightEvent::Arm), Some(FlightMode::Armed));
-        assert_eq!(fsm.handle(FlightEvent::CommandTakeoff), Some(FlightMode::Takeoff));
+        assert_eq!(
+            fsm.handle(FlightEvent::CommandTakeoff),
+            Some(FlightMode::Takeoff)
+        );
         assert_eq!(
             fsm.handle(FlightEvent::ReachedTargetAltitude),
             Some(FlightMode::PositionHold)
         );
         assert_eq!(fsm.handle(FlightEvent::CommandLand), Some(FlightMode::Land));
-        assert_eq!(fsm.handle(FlightEvent::OnGround), Some(FlightMode::Disarmed));
+        assert_eq!(
+            fsm.handle(FlightEvent::OnGround),
+            Some(FlightMode::Disarmed)
+        );
     }
 
     #[test]

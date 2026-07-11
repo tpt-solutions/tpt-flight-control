@@ -22,3 +22,9 @@ impl VioEstimator {
         self.confidence
     }
 }
+
+impl Default for VioEstimator {
+    fn default() -> Self {
+        Self::new()
+    }
+}

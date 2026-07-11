@@ -1,7 +1,7 @@
 //! Shared vehicle state and setpoint types used by the control laws.
 
-use tpt_math::Vector3;
 use tpt_abstractions::Pose6DOF;
+use tpt_math::Vector3;
 
 /// Snapshot of the vehicle state consumed by the control laws.
 #[derive(Debug, Clone, Copy, Default)]

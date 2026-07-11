@@ -7,7 +7,7 @@
 //! using the same geometry the [`tpt_mixer`] quad-X mixer assumes, so the
 //! closed loop is self-consistent.
 
-use tpt_math::{clamp, UnitQuaternion, Vector3, Quaternion};
+use tpt_math::{Quaternion, UnitQuaternion, Vector3, clamp};
 
 // Motor geometry (quad-X, body x forward / y right / z down).
 // Order: [M1 front-right, M2 rear-left, M3 front-left, M4 rear-right].
@@ -104,6 +104,12 @@ impl Plant {
         let t_total = sum * T_MAX;
         let accel = Vector3::new(0.0, 0.0, t_total / MASS);
         (accel, self.omega)
+    }
+}
+
+impl Default for Plant {
+    fn default() -> Self {
+        Self::new()
     }
 }
 

@@ -18,3 +18,9 @@ impl SparseVoxelOctree {
         self.occupied
     }
 }
+
+impl Default for SparseVoxelOctree {
+    fn default() -> Self {
+        Self::new()
+    }
+}

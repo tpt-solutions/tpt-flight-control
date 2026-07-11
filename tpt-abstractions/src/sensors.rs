@@ -1,8 +1,6 @@
 //! Hardware & sensor abstraction traits (`spec.txt` §5.1).
 
-use crate::types::{
-    CameraIntrinsics, FixType, FrameMetadata, GeoPosition, Point3D,
-};
+use crate::types::{CameraIntrinsics, FixType, FrameMetadata, GeoPosition, Point3D};
 use tpt_math::Vector3;
 
 /// Inertial Measurement Unit.

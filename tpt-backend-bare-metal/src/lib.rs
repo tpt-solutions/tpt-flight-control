@@ -13,10 +13,10 @@
 
 /// Hardware abstraction implementations for STM32 entry-class targets.
 pub mod hal {
-    //! Placeholder for GPIO / timer / peripheral drivers.
+    // Placeholder for GPIO / timer / peripheral drivers.
 }
 
 /// Superloop entry point and time-triggered dispatch glue.
 pub mod superloop {
-    //! Placeholder for the rate-group tick driver (§4.2).
+    // Placeholder for the rate-group tick driver (§4.2).
 }

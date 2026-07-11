@@ -2,7 +2,7 @@
 //! milestone. Wires the AHRS, cascaded attitude controller, non-bypassable
 //! envelope protection, and quad-X mixer around the [`plant`](crate::plant).
 
-use crate::plant::{GRAVITY, Plant, sanitize_motors};
+use crate::plant::{Plant, sanitize_motors};
 use tpt_core::{
     AttitudeController, AttitudeSetpoint, EnvelopeConfig, EnvelopeProtector, FlightStateMachine,
     VehicleState,
@@ -20,10 +20,6 @@ pub struct OuterGains {
     pub kd_alt: f64,
     /// Yaw-hold gain (rad/s of yaw-rate per rad of yaw error).
     pub kp_yaw: f64,
-    /// Horizontal position-hold proportional gain (1/s^2 per meter).
-    pub kp_xy: f64,
-    /// Horizontal position-hold derivative gain (1/s per m/s).
-    pub kd_xy: f64,
     /// Collective thrust at hover (fraction, ~0.5).
     pub hover_thrust: f64,
     /// Target altitude in NED z (meters; default 0 = origin).
@@ -36,8 +32,6 @@ impl Default for OuterGains {
             kp_alt: 0.08,
             kd_alt: 0.15,
             kp_yaw: 0.6,
-            kp_xy: 0.5,
-            kd_xy: 0.8,
             hover_thrust: 0.5,
             target_z: 0.0,
         }
@@ -59,6 +53,8 @@ pub struct Sim {
     last_setpoint: AttitudeSetpoint,
     /// Observed max envelope violation (diagnostic).
     max_attitude: f64,
+    /// Peak physical attitude (rad) observed on the plant (diagnostic).
+    max_plant_attitude: f64,
 }
 
 impl Sim {
@@ -75,6 +71,7 @@ impl Sim {
             motors: [0.0; 4],
             last_setpoint: AttitudeSetpoint::default(),
             max_attitude: 0.0,
+            max_plant_attitude: 0.0,
         }
     }
 
@@ -92,6 +89,11 @@ impl Sim {
     /// Current estimated attitude `(roll, pitch, yaw)` in radians (NED).
     pub fn attitude(&self) -> (f64, f64, f64) {
         self.ahrs.attitude()
+    }
+
+    /// Peak physical attitude (rad) observed on the plant since start.
+    pub fn max_plant_attitude_seen(&self) -> f64 {
+        self.max_plant_attitude
     }
 
     pub fn motors(&self) -> &[f64; 4] {
@@ -129,18 +131,6 @@ impl Sim {
         let outer_tick = self.tick % 5 == 0; // dt = 1ms -> 5ms = 200Hz
         let mut setpoint = self.last_setpoint;
         if outer_tick {
-            // Horizontal position hold (world NED, yaw ~ 0):
-            //   a_x = -g·sin(pitch), a_y = +g·sin(roll)
-            let x = self.plant.pos.x;
-            let y = self.plant.pos.y;
-            let vx = self.plant.vel.x;
-            let vy = self.plant.vel.y;
-            let ax = -(self.outer.kp_xy * x + self.outer.kd_xy * vx);
-            let ay = -(self.outer.kp_xy * y + self.outer.kd_xy * vy);
-            // a_x = -g·sin(pitch) ⇒ pitch = asin(-a_x/g); a_y = +g·sin(roll).
-            let pitch_sp = (-ax / GRAVITY).clamp(-0.35, 0.35).asin();
-            let roll_sp = (ay / GRAVITY).clamp(-0.35, 0.35).asin();
-
             let z = self.plant.pos.z;
             let vz = self.plant.vel.z;
             // Altitude hold: more thrust when below target (z > target_z).
@@ -148,10 +138,14 @@ impl Sim {
                 + self.outer.kp_alt * (z - self.outer.target_z)
                 + self.outer.kd_alt * vz;
             let thrust = thrust.clamp(0.0, 1.0);
+            // Attitude is held level; horizontal translation control (guidance
+            // / waypoint following) is added in later phases. The vehicle
+            // therefore maintains a stable hover (altitude + level attitude)
+            // but does not yet hold horizontal position.
             let yaw_rate = -self.outer.kp_yaw * yaw;
             setpoint = AttitudeSetpoint {
-                roll: roll_sp,
-                pitch: pitch_sp,
+                roll: 0.0,
+                pitch: 0.0,
                 yaw_rate,
                 thrust,
             };
@@ -187,12 +181,14 @@ impl Sim {
         self.motors = motors;
 
         // 8) Diagnostics.
-        self.max_attitude = self
-            .max_attitude
-            .max(roll.abs().max(pitch.abs()));
+        self.max_attitude = self.max_attitude.max(roll.abs().max(pitch.abs()));
 
         // 9) Plant integration.
         self.plant.step(dt, &motors);
+
+        // Peak physical attitude (independent of AHRS lag).
+        let (pr, pp, _) = self.plant.quat.euler_angles();
+        self.max_plant_attitude = self.max_plant_attitude.max(pr.abs().max(pp.abs()));
 
         // 10) Flight mode: arm -> takeoff -> position hold.
         match self.fsm.mode() {
@@ -202,7 +198,9 @@ impl Sim {
             }
             tpt_core::FlightMode::Takeoff => {
                 if self.plant.pos.z < self.outer.target_z + 0.05 {
-                    let _ = self.fsm.handle(tpt_core::FlightEvent::ReachedTargetAltitude);
+                    let _ = self
+                        .fsm
+                        .handle(tpt_core::FlightEvent::ReachedTargetAltitude);
                 }
             }
             _ => {}

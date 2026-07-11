@@ -6,8 +6,8 @@
 //! correction. The estimate is kept as a unit quaternion to avoid gimbal-lock
 //! issues inherent in direct angle fusion.
 
-use tpt_math::{clamp, Quaternion, UnitQuaternion, Vector3};
 use libm::{cos, sin};
+use tpt_math::{Quaternion, UnitQuaternion, Vector3, clamp};
 
 /// Build a unit quaternion from a rotation vector `axis * angle` (body frame).
 #[inline]

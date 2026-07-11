@@ -18,3 +18,9 @@ impl SlamBackend {
         self.keyframes
     }
 }
+
+impl Default for SlamBackend {
+    fn default() -> Self {
+        Self::new()
+    }
+}

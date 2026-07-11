@@ -7,9 +7,9 @@
 //! is no API to skip it.
 
 use crate::state::{AttitudeSetpoint, VehicleState};
-use tpt_abstractions::types::BoundingBox;
-use tpt_math::{clamp, Vector3};
 use libm::sqrt;
+use tpt_abstractions::types::BoundingBox;
+use tpt_math::{Vector3, clamp};
 
 /// Envelope limits. All angles in radians, rates in rad/s, speeds in m/s.
 #[derive(Debug, Clone, Copy)]
@@ -26,11 +26,11 @@ pub struct EnvelopeConfig {
 impl Default for EnvelopeConfig {
     fn default() -> Self {
         Self {
-            max_roll: 0.524,        // 30 deg
-            max_pitch: 0.524,       // 30 deg
-            max_roll_rate: 3.49,    // 200 deg/s
+            max_roll: 0.524,     // 30 deg
+            max_pitch: 0.524,    // 30 deg
+            max_roll_rate: 3.49, // 200 deg/s
             max_pitch_rate: 3.49,
-            max_yaw_rate: 2.09,     // 120 deg/s
+            max_yaw_rate: 2.09, // 120 deg/s
             max_climb_rate: 5.0,
             vne: 20.0,
         }
@@ -76,11 +76,7 @@ impl EnvelopeProtector {
     pub fn is_violated(&self, state: &VehicleState) -> bool {
         let cfg = &self.cfg;
         let (r, p, _) = state.attitude;
-        let (rr, pr, yr) = (
-            state.body_rates.x,
-            state.body_rates.y,
-            state.body_rates.z,
-        );
+        let (rr, pr, yr) = (state.body_rates.x, state.body_rates.y, state.body_rates.z);
         r.abs() > cfg.max_roll
             || p.abs() > cfg.max_pitch
             || rr.abs() > cfg.max_roll_rate

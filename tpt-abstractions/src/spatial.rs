@@ -11,11 +11,19 @@ pub trait SpatialMap {
     type Error;
 
     /// Insert a new keyframe (pose + landmarks) into the map.
-    fn insert_keyframe(&mut self, pose: Pose6DOF, landmarks: &[Landmark]) -> Result<(), Self::Error>;
+    fn insert_keyframe(
+        &mut self,
+        pose: Pose6DOF,
+        landmarks: &[Landmark],
+    ) -> Result<(), Self::Error>;
 
     /// Query obstacles within `bbox`, writing up to `out.len()` points and
     /// returning the count written.
-    fn query_obstacles(&self, bbox: &BoundingBox, out: &mut [Point3D]) -> Result<usize, Self::Error>;
+    fn query_obstacles(
+        &self,
+        bbox: &BoundingBox,
+        out: &mut [Point3D],
+    ) -> Result<usize, Self::Error>;
 
     /// Current estimated pose relative to the map origin.
     fn get_local_pose(&self) -> Result<Pose6DOF, Self::Error>;

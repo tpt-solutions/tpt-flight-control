@@ -65,7 +65,10 @@ mod tests {
 
     #[test]
     fn pure_thrust_balances_all_motors() {
-        let m = mix(ControlCommand { thrust: 0.8, ..Default::default() });
+        let m = mix(ControlCommand {
+            thrust: 0.8,
+            ..Default::default()
+        });
         for v in m {
             assert!((v - 0.2).abs() < 1e-12, "v={v}");
         }
@@ -74,7 +77,11 @@ mod tests {
     #[test]
     fn roll_differentiates_left_right() {
         // Positive roll -> right motors (M1, M4) increase, left (M2, M3) drop.
-        let m = mix(ControlCommand { thrust: 0.5, roll: 0.2, ..Default::default() });
+        let m = mix(ControlCommand {
+            thrust: 0.5,
+            roll: 0.2,
+            ..Default::default()
+        });
         assert!(m[0] > 0.125 && m[3] > 0.125);
         assert!(m[1] < 0.125 && m[2] < 0.125);
         assert!((m[0] - m[3]).abs() < 1e-12);
@@ -83,7 +90,11 @@ mod tests {
 
     #[test]
     fn yaw_differentiates_spin_directions() {
-        let m = mix(ControlCommand { thrust: 0.5, yaw: 0.2, ..Default::default() });
+        let m = mix(ControlCommand {
+            thrust: 0.5,
+            yaw: 0.2,
+            ..Default::default()
+        });
         // CW motors (M1, M4) decrease, CCW (M2, M3) increase.
         assert!(m[1] > 0.125 && m[2] > 0.125);
         assert!(m[0] < 0.125 && m[3] < 0.125);
@@ -91,7 +102,10 @@ mod tests {
 
     #[test]
     fn outputs_clamped() {
-        let m = mix(ControlCommand { thrust: 2.0, ..Default::default() });
+        let m = mix(ControlCommand {
+            thrust: 2.0,
+            ..Default::default()
+        });
         for v in m {
             assert!((0.0..=1.0).contains(&v));
         }

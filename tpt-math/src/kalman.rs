@@ -86,10 +86,11 @@ impl<const S: usize, const M: usize> KalmanFilter<S, M> {
         let k = self.p * h.transpose() * s_inv;
         // x = x + K (z - H x)
         let y = z - h * self.x;
-        self.x = self.x + k * y;
+        self.x += k * y;
         // P = (I - K H) P
         let i = SMatrix::<f64, S, S>::identity();
-        self.p = (i - k * *h) * self.p;
+        let new_p = (i - k * *h) * self.p;
+        self.p = new_p;
         Some(())
     }
 
@@ -139,7 +140,15 @@ mod tests {
             let z = SVector::<f64, 1>::new(truth + (step as f64 * 0.013).sin() * 0.1);
             let _ = kf.update(&h, &z);
         }
-        assert!((kf.state()[0] - truth).abs() < 0.05, "pos err {}", kf.state()[0] - truth);
-        assert!((kf.state()[1] - 1.0).abs() < 0.05, "vel err {}", kf.state()[1] - 1.0);
+        assert!(
+            (kf.state()[0] - truth).abs() < 0.05,
+            "pos err {}",
+            kf.state()[0] - truth
+        );
+        assert!(
+            (kf.state()[1] - 1.0).abs() < 0.05,
+            "vel err {}",
+            kf.state()[1] - 1.0
+        );
     }
 }

@@ -25,7 +25,7 @@ pub mod kalman;
 pub mod prelude {
     //! Convenient re-exports.
     pub use crate::{Matrix3, Quaternion, SMatrix, SVector, UnitQuaternion, Vector3};
-    pub use crate::{kalman, angles};
+    pub use crate::{angles, kalman};
 }
 
 /// Clamp `x` to the inclusive range `[lo, hi]`.

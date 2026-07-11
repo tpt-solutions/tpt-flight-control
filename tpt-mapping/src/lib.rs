@@ -15,7 +15,7 @@
 
 #![no_std]
 
-pub mod vio;
+pub mod octree;
 pub mod slam;
 pub mod tan;
-pub mod octree;
+pub mod vio;

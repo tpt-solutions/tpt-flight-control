@@ -19,3 +19,9 @@ impl Tercom {
         self.matched
     }
 }
+
+impl Default for Tercom {
+    fn default() -> Self {
+        Self::new()
+    }
+}

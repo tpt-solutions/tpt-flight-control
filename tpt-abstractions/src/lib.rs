@@ -13,18 +13,16 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-pub mod types;
-pub mod sensors;
-pub mod spatial;
 pub mod actuators;
 pub mod os;
+pub mod sensors;
+pub mod spatial;
+pub mod types;
 
-pub use sensors::{
-    Gnss, Imu, LidarSensor, RadarAltimeter, VisualSensor,
-};
-pub use spatial::{SpatialMap, TerrainDatabase};
 pub use actuators::{ControlSurface, Motor};
 pub use os::{MemoryPool, PartitionChannel, PowerSystem, Scheduler};
+pub use sensors::{Gnss, Imu, LidarSensor, RadarAltimeter, VisualSensor};
+pub use spatial::{SpatialMap, TerrainDatabase};
 pub use types::{
     BoundingBox, CameraIntrinsics, FixType, FrameMetadata, GeoPosition, Landmark, Point3D, Pose6DOF,
 };

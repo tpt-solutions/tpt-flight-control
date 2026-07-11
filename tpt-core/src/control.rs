@@ -68,7 +68,9 @@ impl AttitudeController {
 
         // Inner rate loops -> moments.
         let roll_moment = self.roll_rate.update(roll_rate_cmd - rates.x, rates.x, dt);
-        let pitch_moment = self.pitch_rate.update(pitch_rate_cmd - rates.y, rates.y, dt);
+        let pitch_moment = self
+            .pitch_rate
+            .update(pitch_rate_cmd - rates.y, rates.y, dt);
         let yaw_moment = self.yaw_rate.update(sp.yaw_rate - rates.z, rates.z, dt);
 
         MomentCommand {

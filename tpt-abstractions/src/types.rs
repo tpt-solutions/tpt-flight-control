@@ -16,7 +16,11 @@ pub struct GeoPosition {
 
 impl GeoPosition {
     pub const fn new(lat_deg: f64, lon_deg: f64, alt_m: f64) -> Self {
-        Self { lat_deg, lon_deg, alt_m }
+        Self {
+            lat_deg,
+            lon_deg,
+            alt_m,
+        }
     }
 }
 
@@ -88,8 +92,11 @@ pub struct BoundingBox {
 impl BoundingBox {
     /// Returns `true` if `p` lies within the (inclusive) box.
     pub fn contains(&self, p: &Point3D) -> bool {
-        p.x >= self.min.x && p.x <= self.max.x
-            && p.y >= self.min.y && p.y <= self.max.y
-            && p.z >= self.min.z && p.z <= self.max.z
+        p.x >= self.min.x
+            && p.x <= self.max.x
+            && p.y >= self.min.y
+            && p.y <= self.max.y
+            && p.z >= self.min.z
+            && p.z <= self.max.z
     }
 }
