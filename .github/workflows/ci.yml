@@ -57,6 +57,18 @@ jobs:
           cargo build --target ${{ matrix.target }} -p tpt-core
           cargo build --target ${{ matrix.target }} -p tpt-sensor-fusion
           cargo build --target ${{ matrix.target }} -p tpt-mixer
+          cargo build --target ${{ matrix.target }} -p tpt-backend-bare-metal
+
+  audit:
+    name: Dependency audit & supply-chain
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-deny
+        run: cargo install cargo-deny --locked
+      - name: Audit dependencies
+        run: cargo deny --all-features check advisories licenses bans sources
 
   sbom:
     name: SBOM generation

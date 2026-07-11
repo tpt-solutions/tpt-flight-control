@@ -1,22 +1,26 @@
 //! # tpt-backend-bare-metal
 //!
-//! Bare-metal superloop backend targeting entry-class STM32 MCUs (F4/F7/H7).
+//! Bare-metal superloop backend targeting entry-class STM32 MCUs (F4/F7/H7)
+//! for the `tpt-drone` / `tpt-micro` profiles (`spec.txt` §10.1, §18).
 //!
-//! This crate provides the [`tpt-abstractions`] implementations (HAL, OS
-//! scheduler shim) and hardware bring-up for the `tpt-micro` / `tpt-drone`
-//! profiles. It is intended to run as a `#![no_std]` firmware image.
+//! This crate provides:
+//! - [`hal`] — STM32 peripheral drivers (GPIO, USART, TIM, SysTick, RCC) with a
+//!   dual host/MMIO [`RegisterInterface`], so the exact same driver code runs
+//!   on the PC (for unit tests) and on `thumbv7em-none-eabihf` (real silicon).
+//! - [`board`] — binds the HAL to the [`tpt_abstractions`] sensor/actuator/OS
+//!   traits ([`Imu`], [`Gnss`], [`RadarAltimeter`], [`Scheduler`]) and carries
+//!   the runtime actuator/sensor state.
+//! - [`superloop`] — the time-triggered [`Supervisor`] that wires the platform
+//!   traits to the flight core, AHRS and quad-X mixer.
 //!
-//! > **Status:** scaffolded in Phase -1. The HAL drivers and superloop are
-//! > implemented in Phase 1 (see `spec.txt` §10.1, §18).
+//! The crate is `#![no_std]` and performs no heap allocation in its hot paths.
 
 #![no_std]
 
-/// Hardware abstraction implementations for STM32 entry-class targets.
-pub mod hal {
-    // Placeholder for GPIO / timer / peripheral drivers.
-}
+pub mod board;
+pub mod hal;
+pub mod superloop;
 
-/// Superloop entry point and time-triggered dispatch glue.
-pub mod superloop {
-    // Placeholder for the rate-group tick driver (§4.2).
-}
+pub use board::{MotorChannel, Stm32Board, bring_up};
+pub use hal::{GpioBank, Peripheral, Regs, RegisterInterface, init_clocks_and_io, write_telemetry};
+pub use superloop::{GRAVITY, Supervisor};

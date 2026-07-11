@@ -37,7 +37,7 @@ impl Sim {
     pub fn new() -> Self {
         Self {
             plant: Plant::new(),
-            ahrs: ComplementaryAhrs::new(0.04),
+            ahrs: ComplementaryAhrs::new(0.17),
             controller: AttitudeController::new(),
             envelope: EnvelopeProtector::new(EnvelopeConfig::default()),
             mixer: QuadXMixer,

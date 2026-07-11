@@ -1,0 +1,50 @@
+# cargo-deny configuration for TPT Flight Control.
+#
+# Enforces a supply-chain baseline across all workspace crates:
+#   - advisories : no known vulnerable transitive dependencies.
+#   - licenses   : only permissive / OSI-approved licenses (Apache-2.0 core,
+#                  MIT / BSD / Zlib / ISC / Unicode-DFS tolerated for deps).
+#   - sources    : crates must resolve from crates.io (or the vendored mirror).
+#   - bans       : forbid crates with known-duplicate / unmaintained risks and
+#                  require a single version of every crate where possible.
+#
+# Run locally with:  cargo deny --all-features check
+# (or scripts/audit.sh)
+
+[advisories]
+version = 2
+yanked = "warn"
+ignore = []
+
+[licenses]
+version = 2
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-DFS-2016",
+    "CC0-1.0",          # common for small data/logo assets
+    "Unicode-3.0",      # unicode-ident
+]
+confidence-threshold = 0.8
+exceptions = []
+# Dual-licensed crates (e.g. MIT OR Apache-2.0) are accepted by either.
+
+[bans]
+multiple-versions = "warn"
+wildcards = "allow"
+highlight = "all"
+deny = [
+    # Never pull in crates that require a C toolchain we do not qualify.
+    { name = "ring", reason = "requires C/asm toolchain not in verified subset" },
+]
+allow = []
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []

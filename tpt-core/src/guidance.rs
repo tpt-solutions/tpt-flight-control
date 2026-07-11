@@ -37,11 +37,11 @@ pub struct PositionGains {
 impl Default for PositionGains {
     fn default() -> Self {
         Self {
-            kp_xy: 0.3,
-            kd_xy: 0.5,
-            kp_z: 0.4,
-            kd_z: 0.6,
-            kp_yaw: 0.5,
+            kp_xy: 0.5,
+            kd_xy: 0.9,
+            kp_z: 0.5,
+            kd_z: 0.9,
+            kp_yaw: 0.6,
             max_tilt: 0.35, // ~20 deg
             hover_thrust: 0.5,
         }

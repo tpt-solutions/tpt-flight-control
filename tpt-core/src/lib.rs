@@ -30,6 +30,7 @@ pub mod fsm;
 pub mod control;
 pub mod guidance;
 pub mod state;
+pub mod nav;
 
 pub use pid::Pid;
 pub use envelope::{EnvelopeConfig, EnvelopeProtector};
@@ -38,3 +39,4 @@ pub use fsm::{FlightEvent, FlightMode, FlightStateMachine};
 pub use control::AttitudeController;
 pub use guidance::PositionController;
 pub use state::{AttitudeSetpoint, PositionTarget, VehicleState, VelocitySetpoint};
+pub use nav::GpsInsNavigator;

@@ -118,6 +118,9 @@ version = "0.2.0"
 dependencies = [
  "tpt-abstractions",
  "tpt-core",
+ "tpt-math",
+ "tpt-mixer",
+ "tpt-sensor-fusion",
 ]
 
 [[package]]

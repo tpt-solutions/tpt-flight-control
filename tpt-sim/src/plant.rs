@@ -11,9 +11,14 @@ use tpt_math::{Quaternion, UnitQuaternion, Vector3, clamp};
 
 // Motor geometry (quad-X, body x forward / y right / z down).
 // Order: [M1 front-right, M2 rear-left, M3 front-left, M4 rear-right].
-const X: [f64; 4] = [1.0, -1.0, 1.0, -1.0];
-const Y: [f64; 4] = [1.0, -1.0, -1.0, 1.0];
-const SPIN: [f64; 4] = [-1.0, 1.0, 1.0, -1.0]; // CW = -1, CCW = +1
+//
+// The three torque axes form an orthonormal basis on the four actuators so that
+// roll, pitch, yaw, and thrust are fully decoupled. The SAME vectors are used
+// by the `tpt_mixer` quad-X mixer, which is what makes the closed loop
+// self-consistent.
+const ROLL: [f64; 4] = [1.0, -1.0, -1.0, 1.0];
+const PITCH: [f64; 4] = [1.0, -1.0, 1.0, -1.0];
+const YAW: [f64; 4] = [1.0, 1.0, -1.0, -1.0];
 
 // Vehicle parameters (small 1 kg quad).
 pub const MASS: f64 = 1.0;
@@ -61,10 +66,11 @@ impl Plant {
 
         // Body thrust force (dynamics): rotors push the vehicle up = -z body.
         let f_body = Vector3::new(0.0, 0.0, -t_total);
-        // Body torques from motor distribution.
-        let roll_t = TORQUE_GAIN * dot(&Y, motors);
-        let pitch_t = -TORQUE_GAIN * dot(&X, motors);
-        let yaw_t = TORQUE_GAIN * dot(&SPIN, motors);
+        // Body torques from motor distribution. The orthonormal basis makes
+        // each body-axis torque depend only on the corresponding command.
+        let roll_t = TORQUE_GAIN * dot(&ROLL, motors);
+        let pitch_t = TORQUE_GAIN * dot(&PITCH, motors);
+        let yaw_t = TORQUE_GAIN * dot(&YAW, motors);
         let tau = Vector3::new(roll_t, pitch_t, yaw_t);
 
         // World force = body thrust rotated to world + gravity (down = +z).

@@ -28,13 +28,18 @@ pub struct AttitudeController {
 
 impl AttitudeController {
     /// Build with sensible default gains for a small quadcopter.
+    ///
+    /// Gains are matched to the `tpt-sim` plant (`INERTIA ≈ 0.01..0.02`,
+    /// `TORQUE_GAIN = 0.04`): the inner rate loop runs ~40 rad/s bandwidth and
+    /// the outer angle loop is deliberately over-damped (ζ ≈ 1.3) so it never
+    /// overshoots the envelope-limited setpoint.
     pub fn new() -> Self {
-        let angle = PidConfig::new(6.0, 2.0, 0.2);
-        let rate = PidConfig::new(0.15, 0.05, 0.005);
+        let angle = PidConfig::new(9.0, 5.0, 0.5);
+        let rate = PidConfig::new(14.0, 2.0, 0.05);
         Self {
             roll_angle: Pid::new(angle),
             pitch_angle: Pid::new(angle),
-            yaw_rate: Pid::new(PidConfig::new(3.0, 1.0, 0.1)),
+            yaw_rate: Pid::new(PidConfig::new(8.0, 1.0, 0.1)),
             roll_rate: Pid::new(rate),
             pitch_rate: Pid::new(rate),
         }

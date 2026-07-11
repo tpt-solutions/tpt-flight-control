@@ -9,3 +9,13 @@ description = "Bare-metal superloop backend (STM32F4/F7/H7) for TPT Flight Contr
 [dependencies]
 tpt-abstractions.workspace = true
 tpt-core.workspace = true
+tpt-mixer.workspace = true
+tpt-sensor-fusion.workspace = true
+tpt-math.workspace = true
+
+[features]
+default = []
+# Select the target MCU family (affects clock tree / peripheral bases).
+stm32f4 = []
+stm32f7 = []
+stm32h7 = []

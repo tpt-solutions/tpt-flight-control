@@ -14,10 +14,23 @@
 //!      rear
 //! ```
 //!
-//! `M1` and `M4` spin CW (negative yaw reaction), `M3` and `M2` spin CCW.
+//! The allocation is an orthonormal basis on the four actuators, so `roll`,
+//! `pitch`, `yaw`, and collective `thrust` are fully decoupled. The same
+//! `ROLL`/`PITCH`/`YAW` vectors are used by the `tpt-sim` plant (see
+//! `plant.rs`), which is what makes the closed loop self-consistent.
+//!
+//! Spin assignment (reaction torque about `z`): `M1` and `M2` spin CW, `M3`
+//! and `M4` spin CCW.
 
 use crate::{ControlCommand, MotorMixer};
 use tpt_math::clamp;
+
+/// Roll allocation vector (right motors `+y` vs left `-y`).
+pub const ROLL: [f64; 4] = [1.0, -1.0, -1.0, 1.0];
+/// Pitch allocation vector (front motors `+x` vs rear `-x`).
+pub const PITCH: [f64; 4] = [1.0, -1.0, 1.0, -1.0];
+/// Yaw allocation vector (diagonal CW pair `M1,M2` vs CCW pair `M3,M4`).
+pub const YAW: [f64; 4] = [1.0, 1.0, -1.0, -1.0];
 
 /// Quadcopter X mixer (4 motors).
 #[derive(Debug, Clone, Copy, Default)]
@@ -27,16 +40,20 @@ impl QuadXMixer {
     pub const MOTOR_COUNT: usize = 4;
 
     /// Mix without requiring a `MotorMixer` trait object.
+    ///
+    /// `m[i] = (thrust + ROLL[i]*roll + PITCH[i]*pitch + YAW[i]*yaw) / 4`.
+    /// The basis is orthonormal, so the resulting body torques about each axis
+    /// are independent of the other commands.
     pub fn mix_into(cmd: &ControlCommand, out: &mut [f64]) {
         debug_assert!(out.len() >= Self::MOTOR_COUNT);
         let t = cmd.thrust;
         let r = cmd.roll;
         let p = cmd.pitch;
         let y = cmd.yaw;
-        out[0] = (t + r - p - y) * 0.25; // M1 front-right (CW)
-        out[1] = (t - r + p + y) * 0.25; // M2 rear-left  (CCW)
-        out[2] = (t - r - p + y) * 0.25; // M3 front-left (CCW)
-        out[3] = (t + r + p - y) * 0.25; // M4 rear-right (CW)
+        out[0] = (t + ROLL[0] * r + PITCH[0] * p + YAW[0] * y) * 0.25; // M1 front-right
+        out[1] = (t + ROLL[1] * r + PITCH[1] * p + YAW[1] * y) * 0.25; // M2 rear-left
+        out[2] = (t + ROLL[2] * r + PITCH[2] * p + YAW[2] * y) * 0.25; // M3 front-left
+        out[3] = (t + ROLL[3] * r + PITCH[3] * p + YAW[3] * y) * 0.25; // M4 rear-right
         for v in out.iter_mut() {
             *v = clamp(*v, 0.0, 1.0);
         }
@@ -95,9 +112,9 @@ mod tests {
             yaw: 0.2,
             ..Default::default()
         });
-        // CW motors (M1, M4) decrease, CCW (M2, M3) increase.
-        assert!(m[1] > 0.125 && m[2] > 0.125);
-        assert!(m[0] < 0.125 && m[3] < 0.125);
+        // CW pair (M1, M2) increase, CCW pair (M3, M4) decrease.
+        assert!(m[0] > 0.125 && m[1] > 0.125);
+        assert!(m[2] < 0.125 && m[3] < 0.125);
     }
 
     #[test]
