@@ -30,12 +30,8 @@ pub fn chacha20_block(key: &[u8; 32], counter: u32, nonce: &[u8; 12]) -> [u8; 64
     let mut state = [0u32; 16];
     state[0..4].copy_from_slice(&CONSTANTS);
     for i in 0..8 {
-        state[4 + i] = u32::from_le_bytes([
-            key[4 * i],
-            key[4 * i + 1],
-            key[4 * i + 2],
-            key[4 * i + 3],
-        ]);
+        state[4 + i] =
+            u32::from_le_bytes([key[4 * i], key[4 * i + 1], key[4 * i + 2], key[4 * i + 3]]);
     }
     state[12] = counter;
     for i in 0..3 {
@@ -122,9 +118,7 @@ impl Poly1305 {
         Self {
             r,
             // s_limbs = 5 * r_i, used to fold the 2^130 carry during multiply.
-            s_limbs: [
-                r0 * 5, r1 * 5, r2 * 5, r3 * 5, r4 * 5,
-            ],
+            s_limbs: [r0 * 5, r1 * 5, r2 * 5, r3 * 5, r4 * 5],
             h: [0; 5],
             s: {
                 let mut s = [0u8; 16];
@@ -165,9 +159,9 @@ impl Poly1305 {
     fn block(&mut self, b: &[u8; 16], len: usize) {
         // Load the valid message bytes into five 26-bit limbs (little-endian).
         let mut v = [0u32; 5];
-        for i in 0..len {
+        for (i, &byte) in b.iter().take(len).enumerate() {
             for bit in 0..8 {
-                if (b[i] >> bit) & 1 != 0 {
+                if (byte >> bit) & 1 != 0 {
                     let pos = i * 8 + bit;
                     v[pos / 26] |= 1 << (pos % 26);
                 }
@@ -263,8 +257,8 @@ impl Poly1305 {
             h[4] += c5;
             h[4] &= 0x3ff_ffff;
         }
-        for i in 0..5 {
-            self.h[i] = h[i] as u32;
+        for (dst, &val) in self.h.iter_mut().zip(h.iter()).take(5) {
+            *dst = val as u32;
         }
         self.reduce();
     }
@@ -292,13 +286,13 @@ impl Poly1305 {
                 break;
             }
             let mut borrow = 0i64;
-            for i in 0..5 {
-                let v = self.h[i] as i64 - p[i] as i64 - borrow;
+            for (h, &pi) in self.h.iter_mut().zip(p.iter()).take(5) {
+                let v = *h as i64 - pi as i64 - borrow;
                 if v < 0 {
-                    self.h[i] = (v + (1i64 << 26)) as u32;
+                    *h = (v + (1i64 << 26)) as u32;
                     borrow = 1;
                 } else {
-                    self.h[i] = v as u32;
+                    *h = v as u32;
                     borrow = 0;
                 }
             }

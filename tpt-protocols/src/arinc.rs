@@ -44,7 +44,7 @@ impl Arinc429Word {
     /// Construct a word with odd parity computed. `data` is masked to 19 bits.
     pub fn new(label: u8, sdi: u8, data: u32, ssm: u8) -> Self {
         Self {
-            label: label & 0xFF,
+            label,
             sdi: sdi & 0x03,
             data: data & 0x7_FFFF,
             ssm: ssm & 0x03,
@@ -90,11 +90,7 @@ impl Arinc429Word {
         // Sign bit is the top bit of the 19-bit field.
         let sign = (raw >> 18) & 0x01;
         let mag = raw & 0x3_FFFF; // lower 18 bits magnitude
-        let signed = if sign == 1 {
-            -(mag as f64)
-        } else {
-            mag as f64
-        };
+        let signed = if sign == 1 { -(mag as f64) } else { mag as f64 };
         signed * lsb
     }
 
@@ -104,7 +100,7 @@ impl Arinc429Word {
         // Round half away from zero using only core methods (no_std-safe).
         let r = value / lsb;
         let steps = (r + 0.5 * r.signum()) as i64;
-        let mag = (steps.abs() as u32) & 0x3_FFFF;
+        let mag = (steps.unsigned_abs() as u32) & 0x3_FFFF;
         let sign = if steps < 0 { 0x01 } else { 0x00 };
         let data = (sign << 18) | mag; // 19-bit field
         Self::new(self.label, self.sdi, data, self.ssm)

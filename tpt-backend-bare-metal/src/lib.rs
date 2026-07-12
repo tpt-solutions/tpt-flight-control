@@ -22,5 +22,5 @@ pub mod hal;
 pub mod superloop;
 
 pub use board::{MotorChannel, Stm32Board, bring_up};
-pub use hal::{GpioBank, Peripheral, Regs, RegisterInterface, init_clocks_and_io, write_telemetry};
+pub use hal::{GpioBank, Peripheral, RegisterInterface, Regs, init_clocks_and_io, write_telemetry};
 pub use superloop::{GRAVITY, Supervisor};

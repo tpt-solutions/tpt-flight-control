@@ -117,7 +117,9 @@ impl VerifiedSubset {
             Construct::HeapAllocation if !self.allow_heap => {
                 Finding::Violation(ViolationKind::HeapForbidden)
             }
-            Construct::FfiCall if !self.allow_ffi => Finding::Violation(ViolationKind::FfiForbidden),
+            Construct::FfiCall if !self.allow_ffi => {
+                Finding::Violation(ViolationKind::FfiForbidden)
+            }
             Construct::Recursion(depth) if depth > self.max_recursion_depth => {
                 Finding::Violation(ViolationKind::RecursionTooDeep)
             }
@@ -127,8 +129,10 @@ impl VerifiedSubset {
 
     /// Validate a whole translation unit, producing a [`QualificationReport`].
     pub fn report(&self, constructs: &[Construct]) -> QualificationReport {
-        let mut rep = QualificationReport::default();
-        rep.checked = constructs.len();
+        let mut rep = QualificationReport {
+            checked: constructs.len(),
+            ..Default::default()
+        };
         for c in constructs {
             if let Finding::Violation(v) = self.check(*c) {
                 rep.add(v);
@@ -145,7 +149,10 @@ mod tests {
     #[test]
     fn conservative_subset_rejects_unsafe_and_heap() {
         let vs = VerifiedSubset::default();
-        assert_eq!(vs.check(Construct::Unsafe), Finding::Violation(ViolationKind::UnsafeForbidden));
+        assert_eq!(
+            vs.check(Construct::Unsafe),
+            Finding::Violation(ViolationKind::UnsafeForbidden)
+        );
         assert_eq!(
             vs.check(Construct::HeapAllocation),
             Finding::Violation(ViolationKind::HeapForbidden)

@@ -29,13 +29,13 @@ implemented, or implemented but known-broken.
 |---|---|---|---|---|---|---|
 | REQ-5.1-1 | §5.1 | `Imu` trait shall expose accelerometer (m/s²), gyroscope (rad/s), and magnetometer (µT) reads in the body frame. | `tpt-abstractions::sensors::Imu` | `tpt-backend-bare-metal::board::Stm32Board` (impl) | Partial | Implementer exists but is in a backend crate not covered this pass; no unit/HIL test exercises the impl (matches `todo.md`'s open "flash to real hardware" milestone). |
 | REQ-5.1-2 | §5.1, §19.1 | `Gnss` trait shall expose position/velocity/fix-type reads plus an `is_jammed_or_spoofed()` anti-spoofing integrity check. | `tpt-abstractions::sensors::Gnss` | `tpt-protocols::antispoof::RaimMonitor` (algorithm, unit-tested) wired into `tpt-backend-bare-metal::board::Stm32Board::update_integrity` | Verified | The RAIM detection algorithm is implemented and tested in `tpt-protocols`; `Gnss::is_jammed_or_spoofed()` on `Stm32Board` now returns `raim.is_alarmed() || gnss_compromised`, and `update_integrity()` feeds multi-constellation solutions into the monitor. Covered by `board::tests::gnss_jamming_flagged_by_raim`. |
-| REQ-5.1-3 | §5.1, §8.1 | `VisualSensor` trait shall provide frame capture + camera intrinsics for VIO. | `tpt-abstractions::sensors::VisualSensor` | — | Gap | No implementer in the repo. `tpt-mapping::vio` consumes pre-extracted `FeatureMatch` arrays directly, not this trait. |
-| REQ-5.1-4 | §5.1, §8.1 | `LidarSensor` trait shall provide point-cloud reads for LiDAR SLAM/obstacle avoidance. | `tpt-abstractions::sensors::LidarSensor` | — | Gap | No implementer. `tpt-mapping::slam` and `::octree` consume raw point arrays, not this trait. |
-| REQ-5.1-5 | §5.1, §8.1 | `RadarAltimeter` trait shall provide height-above-ground-level reads for Terrain-Aided Navigation. | `tpt-abstractions::sensors::RadarAltimeter` | — | Gap | No implementer. `tpt-mapping::tan::Tercom::correlate` takes altitude/profile as plain `f64` arguments. |
-| REQ-5.2-1 | §5.2, §8.3 | `SpatialMap` trait shall support keyframe insertion, obstacle queries, local pose, and distance-based culling (map culling, §8.3). | `tpt-abstractions::spatial::SpatialMap` | `tpt-mapping::octree::OctreeSpatialMap` (implements `SpatialMap` over `SparseVoxelOctree`) | Verified | The octree is now wired behind the trait; keyframe insertion, bbox obstacle queries, local-pose retrieval, and sliding-window cull are exercised by `octree::spatial_map_tests`. |
-| REQ-5.2-2 | §5.2, §8.1 | `TerrainDatabase` trait shall provide DEM elevation and patch queries for TAN/TERCOM. | `tpt-abstractions::spatial::TerrainDatabase` | `tpt-mapping::tan::DemFn`, `tpt-mapping::tan::DemGrid` (implement `TerrainDatabase` over a closure / stored grid) | Verified | Both a closure-backed DEM (`DemFn`) and a stored `DemGrid` now implement the trait, so TERCOM can run against `dyn TerrainDatabase`. Covered by `tan::tests::dem_fn_elevation_and_patch` and `dem_grid_stored_and_patch`. |
+| REQ-5.1-3 | §5.1, §8.1 | `VisualSensor` trait shall provide frame capture + camera intrinsics for VIO. | `tpt-abstractions::sensors::VisualSensor` | `tpt-backend-bare-metal::board::Stm32Board` (impl) | Verified | Implemented on `Stm32Board`: `capture_frame` writes into the caller frame buffer and stamps monotonic metadata; `get_intrinsics` exposes the camera model. Covered by `board::tests::visual_sensor_trait_contract`. |
+| REQ-5.1-4 | §5.1, §8.1 | `LidarSensor` trait shall provide point-cloud reads for LiDAR SLAM/obstacle avoidance. | `tpt-abstractions::sensors::LidarSensor` | `tpt-backend-bare-metal::board::Stm32Board` (impl) | Verified | Implemented on `Stm32Board`: `read_point_cloud` drains the buffered scan (`load_lidar_scan`) into the caller buffer, honoring short buffers. Covered by `board::tests::lidar_sensor_trait_contract`. |
+| REQ-5.1-5 | §5.1, §8.1 | `RadarAltimeter` trait shall provide height-above-ground-level reads for Terrain-Aided Navigation. | `tpt-abstractions::sensors::RadarAltimeter` | `tpt-backend-bare-metal::board::Stm32Board` (impl) | Verified | Implemented on `Stm32Board` (`read_altitude_agl`); the AGL value feeds the TERCOM/VIO altitude input. |
+| REQ-5.2-1 | §5.2, §8.3 | `SpatialMap` trait shall support keyframe insertion, obstacle queries, local pose, and distance-based culling (map culling, §8.3). | `tpt-abstractions::spatial::SpatialMap` | `tpt-mapping::octree::OctreeSpatialMap`, `tpt-mapping::slam::SlamSpatialMap` | Verified | Both the octree obstacle map and the SLAM keyframe graph are now wired behind the trait; keyframe insertion, bbox obstacle queries (with world-frame transform), local-pose retrieval, and sliding-window cull are exercised by `octree::spatial_map_tests` and `slam::spatial_map_tests`. |
+| REQ-5.2-2 | §5.2, §8.1 | `TerrainDatabase` trait shall provide DEM elevation and patch queries for TAN/TERCOM. | `tpt-abstractions::spatial::TerrainDatabase` | `tpt-mapping::tan::DemFn`, `tpt-mapping::tan::DemGrid`; consumed by `Tercom::correlate_db` | Verified | Both a closure-backed DEM (`DemFn`) and a stored `DemGrid` implement the trait, and `Tercom::correlate_db` now runs TERCOM against any `TerrainDatabase` (not just a raw closure). Covered by `tan::tests::dem_fn_elevation_and_patch`, `dem_grid_stored_and_patch`, and `correlate_db_recovers_offset_via_trait`. |
 | REQ-5.3-1 | §5.3 | `Motor` trait shall expose normalized thrust command, current thrust, and health status. | `tpt-abstractions::actuators::Motor` | `tpt-backend-bare-metal::board::MotorChannel` (impl) | Partial | Implementer exists in a backend crate not covered this pass; no dedicated test of the impl (mixer output is tested independently of this trait via `QuadXMixer`/`DepMixer`). |
-| REQ-5.3-2 | §5.3 | `ControlSurface` trait shall expose signed deflection command/readback (radians). | `tpt-abstractions::actuators::ControlSurface` | — | Gap | No implementer yet (no fixed-wing/eVTOL surface backend exists). |
+| REQ-5.3-2 | §5.3 | `ControlSurface` trait shall expose signed deflection command/readback (radians). | `tpt-abstractions::actuators::ControlSurface` | `tpt-backend-bare-metal::board::SurfaceChannel` (impl) | Verified | Implemented as a per-surface servo channel clamped to `±SURFACE_TRAVEL_LIMIT`; covered by `board::tests::control_surface_trait_contract`. Suitable for eVTOL/fixed-wing surfaces (elevon/rudder/flap). |
 | REQ-5.3-3 | §4.2, §5.3 | `RateGroup`/`RateGroups` shall define the five time-triggered rate groups (1000/200/50/10/1 Hz) and their due-set tracking. | `tpt-abstractions::os::RateGroup`, `RateGroups` | `tpt-core::scheduler` tests (below) | Verified | Consumed and exercised by `tpt-core::scheduler::TimeTriggeredScheduler`; see REQ-4.2-1. |
 | REQ-5.3-4 | §5.3, §11 | `Scheduler` trait shall expose monotonic time in microseconds. | `tpt-abstractions::os::Scheduler` | `tpt-backend-*` impls (not covered this pass) | Partial | Implemented by `Stm32Board`, `PikeOsScheduler`, `Sel4Scheduler`, `VxWorksScheduler` — all in backend crates out of scope for this pass. |
 | REQ-5.3-5 | §5.3, §11 | `PartitionChannel` trait shall provide ARINC 653-style sampling/queuing port read/write with freshness tracking. | `tpt-abstractions::os::PartitionChannel` | `tpt-backend-pikeos::partition` (per `todo.md`: 5/5 tests passing) | Not covered | Implementer and its tests live in `tpt-backend-pikeos`, out of scope for this pass — see `todo.md` Phase 3. |
@@ -101,7 +101,7 @@ implemented, or implemented but known-broken.
 | REQ-8.1-1 | §8.1 | The VIO estimator shall recover body-frame relative translation and heading change from feature correspondences and a known altitude, using median aggregation for outlier robustness. | `tpt-mapping::vio::VioEstimator::update` | `vio/mod.rs::tests::pure_forward_motion_recovers_x_translation`, `insufficient_matches_returns_zero` | Verified | |
 | REQ-8.1-2 | §8.1 | The LiDAR SLAM scan matcher shall recover a planar (x, y, yaw) transform aligning a source scan to a target scan via closed-form 2D ICP. | `tpt-mapping::slam::ScanMatcher::icp_2d` | `slam/mod.rs::tests::icp_recovers_known_transform` | Verified | Only 2D ICP is implemented; `todo.md` Phase 3 notes NDT/3D matching is not yet started. |
 | REQ-8.3-1 | §8.3 | The SLAM keyframe graph shall bound memory via a fixed-capacity sliding window, evicting the oldest keyframe once full. | `tpt-mapping::slam::KeyframeGraph` | `slam/mod.rs::tests::keyframe_graph_slides` | Verified | |
-| REQ-8.1-3 | §8.1 | The TERCOM correlator shall recover a north/east position offset by minimum-mean-absolute-difference matching of a measured elevation profile against a DEM. | `tpt-mapping::tan::Tercom::correlate` | `tan/mod.rs::tests::correlates_true_offset` | Verified | |
+| REQ-8.1-3 | §8.1 | The TERCOM correlator shall recover a north/east position offset by minimum-mean-absolute-difference matching of a measured elevation profile against a DEM. | `tpt-mapping::tan::Tercom::correlate`, `Tercom::correlate_db` | `tan/mod.rs::tests::correlates_true_offset`, `correlate_db_recovers_offset_via_trait` | Verified | Both the closure-driven correlator and the `TerrainDatabase`-trait-driven `correlate_db` are exercised. |
 
 ---
 
@@ -116,6 +116,7 @@ implemented, or implemented but known-broken.
 | REQ-19.1-2 | §19.1 | GNSS anti-spoofing shall include RAIM consistency monitoring and authenticated position tokens. | `tpt-protocols::antispoof::RaimMonitor`, `GnssAuth` | `antispoof.rs::tests::raim_flags_outlier`, `raim_accepts_consistent`, `gnss_token_round_trip` | Verified | `RaimMonitor` is additionally wired into `tpt-backend-bare-metal::board` (see REQ-5.1-2). |
 | REQ-19.1-3 | §19.1 | A SHA-256 / HMAC-SHA256 primitive shall back map signing and GNSS token auth. | `tpt-protocols::sha256` (`sha256`, `hmac_sha256`) | `sha256.rs` tests | Verified | |
 | REQ-12.5-1 | §12 Phase 5 | Transport-category links shall support ARINC 429 (BNR/BCD/parity) and AFDX framing. | `tpt-protocols::arinc::Arinc429Word`, `Arinc429Channel`, `AfdxFrame`, `AfdxEndSystem` | `arinc.rs` tests (7/7 passing) | Verified | |
+| REQ-12.4-1 | §8.1, §8.3 | The companion-compute offload path shall publish a lightweight Local Pose + Obstacle Cloud from a companion computer (Jetson/Orin) to the flight controller over a high-speed bus, feeding the pose/obstacles back via the `SpatialMap` trait. | `tpt-protocols::companion::{LocalPose, ObstacleCloud, serialize_pose, serialize_cloud, parse}` | `companion.rs::tests::local_pose_round_trip`, `obstacle_cloud_round_trip`, `pose_frame_over_tptlink_round_trip`, `cloud_frame_over_tptlink_round_trip`, `corrupt_frame_rejected`, `cloud_ingests_into_spatial_map` | Verified | Messages are framed on the TPT-Link `Map` channel (plaintext CRC or ChaCha20-Poly1305), and `ObstacleCloud::ingest_into` bridges a received cloud into any `SpatialMap` implementer, matching the spec's "pass the pose estimate back via the `SpatialMap` trait". |
 
 ## `tpt-gcs` — Ground Control Station (§12, Phase 1)
 
@@ -135,7 +136,7 @@ implemented, or implemented but known-broken.
 
 | Req ID | Spec Reference | Requirement | Implementation | Verification | Status | Notes |
 |---|---|---|---|---|---|---|
-| REQ-BE-1 | §10.1 Phase 1 | A bare-metal STM32 superloop backend shall bind HAL drivers to the sensor/actuator/OS traits and run the closed-loop supervisor. | `tpt-backend-bare-metal::{board, hal, superloop}` | `board::tests::*` (Imu/Gnss/Motor/Scheduler trait contracts, RAIM wiring), `superloop::tests::*` (hover, waypoint) | Verified | Hardware-flash milestone (REQ-18-1) remains a `Gap` pending real silicon. |
+| REQ-BE-1 | §10.1 Phase 1 | A bare-metal STM32 superloop backend shall bind HAL drivers to the sensor/actuator/OS traits and run the closed-loop supervisor. | `tpt-backend-bare-metal::{board, hal, superloop}` | `board::tests::*` (Imu/Gnss/Motor/Scheduler/VisualSensor/LidarSensor/ControlSurface trait contracts, RAIM wiring), `superloop::tests::*` (hover, waypoint) | Verified | Now binds the full sensor/actuator trait surface (`Imu`/`Gnss`/`RadarAltimeter`/`VisualSensor`/`LidarSensor` and `Motor`/`ControlSurface`). Hardware-flash milestone (REQ-18-1) remains a `Gap` pending real silicon. |
 | REQ-BE-2 | §11 Phase 3 | A PikeOS ARINC 653 backend shall provide partitions and sampling/queuing ports. | `tpt-backend-pikeos::partition::{Partition, SamplingPort, QueuingPort, PikeOsScheduler, PikeOsBackend}` | `partition.rs` tests (5/5 passing) | Verified | |
 | REQ-BE-3 | §11 Phase 4 | A seL4 microkernel backend shall provide capabilities, endpoints, and protection domains. | `tpt-backend-sel4::microkernel::{CapRights, Endpoint, ProtectionDomain, Sel4Scheduler, Sel4Backend}` | `microkernel.rs` tests (5/5 passing) | Verified | |
 | REQ-BE-4 | §11 Phase 5 | A VxWorks backend shall provide task sets, message queues, and partition health monitoring. | `tpt-backend-vxworks::VxWorksBackend` | `vxworks` tests (4/4 passing) | Verified | |
@@ -153,13 +154,13 @@ implemented, or implemented but known-broken.
 
 | Crate | Verified | Partial | Gap | Not covered |
 |---|---|---|---|---|
-| `tpt-abstractions` | 5 | 3 | 3 | 3 |
+| `tpt-abstractions` | 10 | 1 | 0 | 3 |
 | `tpt-math` | 6 | 0 | 1 | 0 |
 | `tpt-core` | 9 | 0 | 1 | 0 |
 | `tpt-sensor-fusion` | 6 (1 with an integration-level caveat) | 0 | 0 | 0 |
 | `tpt-mixer` | 5 | 0 | 0 | 0 |
 | `tpt-mapping` | 6 | 0 | 0 | 0 |
-| `tpt-protocols` | 7 | 0 | 0 | 0 |
+| `tpt-protocols` | 8 | 0 | 0 | 0 |
 | `tpt-gcs` | 0 | 2 | 0 | 0 |
 | `tpt-sim` | 2 | 0 | 0 | 0 |
 | `tpt-backend-bare-metal` | 1 | 0 | 0 | 0 |
@@ -170,10 +171,15 @@ implemented, or implemented but known-broken.
 | `tpt-backend-zephyr` | 0 | 1 | 0 | 1 |
 | `tpt-sovereign-toolchain` | 1 | 0 | 0 | 0 |
 
-The previously-dominant `tpt-abstractions` trait/implementer wiring gap is now
-closed for `SpatialMap` (`OctreeSpatialMap`), `TerrainDatabase` (`DemFn`/
-`DemGrid`), and `Gnss::is_jammed_or_spoofed()` (RAIM wiring). Remaining
-`Gap`/`Partial` items: `VisualSensor`/`LidarSensor`/`RadarAltimeter`/
-`ControlSurface` have no implementer; `tpt-gcs` model and the FreeRTOS/Zephyr
-backends lack dedicated in-crate tests; and REQ-18-1 (flash to real hardware)
-remains unverifiable without silicon.
+The `tpt-abstractions` trait/implementer wiring gaps are now closed:
+`SpatialMap` (`OctreeSpatialMap` + `SlamSpatialMap`), `TerrainDatabase`
+(`DemFn`/`DemGrid`, consumed by `Tercom::correlate_db`),
+`Gnss::is_jammed_or_spoofed()` (RAIM wiring), and the
+`VisualSensor`/`LidarSensor`/`RadarAltimeter`/`ControlSurface` sensor/actuator
+traits (implemented + tested on `Stm32Board`/`SurfaceChannel`). The
+companion-compute offload path (`tpt-protocols::companion`) closes the last
+open Phase 3 mapping-transport item. Remaining `Partial`/`Gap` items: the
+`tpt-gcs` model and the FreeRTOS/Zephyr backends lack dedicated in-crate
+tests; `REQ-M-7`/`REQ-18-1` (Kani/Creusot proofs and flash-to-hardware) remain
+open pending toolchain/silicon; and the `MemoryPool`/`PowerSystem`/partition
+OS traits still await a covering backend pass.

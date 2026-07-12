@@ -107,7 +107,10 @@ mod tests {
     fn transition_midband_is_linear() {
         let mut t = TiltRotor::new(8.0, 28.0);
         let tilt = t.update(18.0); // halfway -> 45°
-        assert!((tilt - core::f64::consts::FRAC_PI_4).abs() < 1e-9, "tilt={tilt}");
+        assert!(
+            (tilt - core::f64::consts::FRAC_PI_4).abs() < 1e-9,
+            "tilt={tilt}"
+        );
         assert_eq!(t.phase(), TiltPhase::Transition);
         assert!((t.blend() - 0.5).abs() < 1e-9);
     }

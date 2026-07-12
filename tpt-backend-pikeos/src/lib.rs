@@ -21,6 +21,6 @@
 pub mod partition;
 
 pub use partition::{
-    Partition, PartitionChannelKind, PartitionError, PartitionMode, PikeOsBackend,
-    PikeOsScheduler, QueuingPort, SamplingPort,
+    Partition, PartitionChannelKind, PartitionError, PartitionMode, PikeOsBackend, PikeOsScheduler,
+    QueuingPort, SamplingPort,
 };

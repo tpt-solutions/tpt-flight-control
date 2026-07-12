@@ -63,7 +63,12 @@ impl PositionController {
     ///
     /// `gravity` is the gravitational acceleration (m/s^2) used for the
     /// tilt/acceleration mapping and thrust compensation.
-    pub fn update(&self, target: &PositionTarget, state: &VehicleState, gravity: f64) -> AttitudeSetpoint {
+    pub fn update(
+        &self,
+        target: &PositionTarget,
+        state: &VehicleState,
+        gravity: f64,
+    ) -> AttitudeSetpoint {
         // Horizontal desired acceleration (world NED, yaw ~ 0).
         let ax = self.gains.kp_xy * (target.x - state.position.x)
             + self.gains.kd_xy * (target.vx - state.velocity.x);
@@ -76,8 +81,16 @@ impl PositionController {
         let ay = clamp(ay, -a_max, a_max);
 
         // a_x = -g·sin(pitch), a_y = +g·sin(roll)  (see tpt-sim plant model).
-        let pitch = asin(clamp(-ax / gravity, -self.gains.max_tilt, self.gains.max_tilt));
-        let roll = asin(clamp(ay / gravity, -self.gains.max_tilt, self.gains.max_tilt));
+        let pitch = asin(clamp(
+            -ax / gravity,
+            -self.gains.max_tilt,
+            self.gains.max_tilt,
+        ));
+        let roll = asin(clamp(
+            ay / gravity,
+            -self.gains.max_tilt,
+            self.gains.max_tilt,
+        ));
         let tilt = sqrt(pitch * pitch + roll * roll);
         let cos_tilt = cos(tilt);
 
@@ -86,7 +99,11 @@ impl PositionController {
         // the vertical lift at the hover point: u = hover·(1 − a_z/g)/cos.
         let ez = target.z - state.position.z;
         let az = self.gains.kp_z * ez + self.gains.kd_z * (target.vz - state.velocity.z);
-        let thrust = clamp(self.gains.hover_thrust * (1.0 - az / gravity) / cos_tilt, 0.0, 1.0);
+        let thrust = clamp(
+            self.gains.hover_thrust * (1.0 - az / gravity) / cos_tilt,
+            0.0,
+            1.0,
+        );
 
         let yaw_rate = self.gains.kp_yaw * (target.yaw - state.attitude.2);
 

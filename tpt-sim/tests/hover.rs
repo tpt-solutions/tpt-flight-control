@@ -17,7 +17,11 @@ fn hovers_from_level() {
     assert!(p.pos.x.abs() < 0.3, "x drift {}", p.pos.x);
     assert!(p.pos.y.abs() < 0.3, "y drift {}", p.pos.y);
     assert!(p.pos.z.abs() < 0.3, "altitude drift {}", p.pos.z);
-    assert!(sim.max_attitude_seen() < 0.05, "attitude {}", sim.max_attitude_seen());
+    assert!(
+        sim.max_attitude_seen() < 0.05,
+        "attitude {}",
+        sim.max_attitude_seen()
+    );
     // At hover the collective thrust command is ~0.5; with the quad-X mixer
     // each motor sits at ~thrust/4 and the sum equals the collective.
     let sum: f64 = sim.motors().iter().sum();
@@ -43,7 +47,10 @@ fn recovers_from_attitude_disturbance() {
     assert!(p.pos.y.abs() < 0.5, "y drift {}", p.pos.y);
     assert!(p.pos.z.abs() < 0.3, "altitude drift {}", p.pos.z);
     // It must have actually tilted to recover before settling level.
-    assert!(sim.max_plant_attitude_seen() > 0.1, "should have tilted to recover");
+    assert!(
+        sim.max_plant_attitude_seen() > 0.1,
+        "should have tilted to recover"
+    );
 }
 
 #[test]
@@ -60,5 +67,9 @@ fn flies_to_waypoint() {
     assert!((p.pos.x - 5.0).abs() < 1.0, "x = {}", p.pos.x);
     assert!((p.pos.y - 5.0).abs() < 1.0, "y = {}", p.pos.y);
     assert!((p.pos.z + 2.0).abs() < 0.5, "z = {}", p.pos.z);
-    assert!(sim.max_attitude_seen() < 0.4, "attitude {}", sim.max_attitude_seen());
+    assert!(
+        sim.max_attitude_seen() < 0.4,
+        "attitude {}",
+        sim.max_attitude_seen()
+    );
 }

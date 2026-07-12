@@ -78,10 +78,7 @@ pub fn serialize_plain(
     out[5..7].copy_from_slice(&seq.to_le_bytes());
     out[7..9].copy_from_slice(&(payload.len() as u16).to_le_bytes());
     out[HEADER_LEN..HEADER_LEN + payload.len()].copy_from_slice(payload);
-    let crc = crc16_x25(
-        &out[..HEADER_LEN + payload.len()],
-        0xFFFF,
-    );
+    let crc = crc16_x25(&out[..HEADER_LEN + payload.len()], 0xFFFF);
     out[HEADER_LEN + payload.len()..total].copy_from_slice(&crc.to_le_bytes());
     Some(total)
 }
@@ -144,15 +141,18 @@ pub fn serialize_encrypted(
     out[4] = msgid;
     out[5..7].copy_from_slice(&seq.to_le_bytes());
     out[7..9].copy_from_slice(&(payload.len() as u16).to_le_bytes());
-    // Encrypt payload in place into the output buffer.
-    out[HEADER_LEN..HEADER_LEN + payload.len()].copy_from_slice(payload);
     // Encrypt payload in place into the output buffer. The AAD covers the
     // fixed header fields (channel/msgid/seq/length); copy them out so the
     // mutable payload borrow does not alias the AAD borrow.
     out[HEADER_LEN..HEADER_LEN + payload.len()].copy_from_slice(payload);
     let mut aad = [0u8; 6];
     aad.copy_from_slice(&out[3..HEADER_LEN]);
-    let tag = aead_encrypt(key, nonce, &aad, &mut out[HEADER_LEN..HEADER_LEN + payload.len()]);
+    let tag = aead_encrypt(
+        key,
+        nonce,
+        &aad,
+        &mut out[HEADER_LEN..HEADER_LEN + payload.len()],
+    );
     out[HEADER_LEN + payload.len()..total].copy_from_slice(&tag);
     Some(total)
 }
@@ -184,13 +184,7 @@ pub fn parse_encrypted(
     tag.copy_from_slice(&buf[HEADER_LEN + length..HEADER_LEN + length + TAG_LEN]);
     // AAD covers the header flags/channel/msgid/seq/length.
     let (head, tail) = buf.split_at_mut(HEADER_LEN);
-    let ok = aead_decrypt(
-        key,
-        nonce,
-        &head[3..HEADER_LEN],
-        &mut tail[..length],
-        &tag,
-    );
+    let ok = aead_decrypt(key, nonce, &head[3..HEADER_LEN], &mut tail[..length], &tag);
     if !ok {
         return None;
     }
@@ -235,7 +229,8 @@ mod tests {
         let nonce = [9u8; 12];
         let mut out = [0u8; 128];
         let payload = b"steer 12.5, climb 3.0";
-        let _n = serialize_encrypted(&mut out, &key, &nonce, Channel::Command, 2, 7, payload).unwrap();
+        let _n =
+            serialize_encrypted(&mut out, &key, &nonce, Channel::Command, 2, 7, payload).unwrap();
         let mut buf = out;
         let (h, len) = parse_encrypted(&mut buf, &key, &nonce).unwrap();
         assert_eq!(h.channel, Channel::Command);
@@ -248,7 +243,8 @@ mod tests {
         let nonce = [9u8; 12];
         let mut out = [0u8; 128];
         let payload = b"secret move";
-        let _n = serialize_encrypted(&mut out, &key, &nonce, Channel::Command, 2, 7, payload).unwrap();
+        let _n =
+            serialize_encrypted(&mut out, &key, &nonce, Channel::Command, 2, 7, payload).unwrap();
         let mut buf = out;
         let bad = [0u8; 32];
         assert!(parse_encrypted(&mut buf, &bad, &nonce).is_none());

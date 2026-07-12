@@ -32,6 +32,7 @@ pub struct Telemetry {
 
 impl Telemetry {
     /// Construct from attitude, position, velocity, battery and modes.
+    #[allow(clippy::too_many_arguments)]
     pub const fn new(
         roll: f64,
         pitch: f64,

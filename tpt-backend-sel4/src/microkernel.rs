@@ -25,9 +25,17 @@ pub struct CapRights {
 
 impl CapRights {
     /// No rights.
-    pub const NONE: CapRights = CapRights { read: false, write: false, grant: false };
+    pub const NONE: CapRights = CapRights {
+        read: false,
+        write: false,
+        grant: false,
+    };
     /// Read + write (typical endpoint send/recv).
-    pub const RW: CapRights = CapRights { read: true, write: true, grant: false };
+    pub const RW: CapRights = CapRights {
+        read: true,
+        write: true,
+        grant: false,
+    };
 
     /// Construct rights from flags.
     pub const fn new(read: bool, write: bool, grant: bool) -> Self {

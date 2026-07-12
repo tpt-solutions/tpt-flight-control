@@ -9,8 +9,8 @@
 //! the remaining rotors absorb the lost authority — the basis of fault-tolerant
 //! reallocation.
 
-use tpt_math::{SMatrix, SVector, Vector2};
 use crate::ControlCommand;
+use tpt_math::{SMatrix, SVector, Vector2};
 
 /// A rotor's geometric placement and spin sense.
 #[derive(Debug, Clone, Copy)]
@@ -106,7 +106,11 @@ impl<const N: usize> DepMixer<N> {
             let alive = self.healthy_count().max(1);
             let t = cmd.thrust / alive as f64;
             for (i, r) in self.rotors.iter().enumerate() {
-                out[i] = if r.healthy { tpt_math::clamp(t, 0.0, 1.0) } else { 0.0 };
+                out[i] = if r.healthy {
+                    tpt_math::clamp(t, 0.0, 1.0)
+                } else {
+                    0.0
+                };
             }
             return false;
         }
@@ -123,7 +127,11 @@ impl<const N: usize> DepMixer<N> {
                 let alive = self.healthy_count().max(1);
                 let t = cmd.thrust / alive as f64;
                 for (i, r) in self.rotors.iter().enumerate() {
-                    out[i] = if r.healthy { tpt_math::clamp(t, 0.0, 1.0) } else { 0.0 };
+                    out[i] = if r.healthy {
+                        tpt_math::clamp(t, 0.0, 1.0)
+                    } else {
+                        0.0
+                    };
                 }
                 return false;
             }
@@ -133,7 +141,8 @@ impl<const N: usize> DepMixer<N> {
 
         // thrust_i = A_row_i · v  (column i dotted with v).
         for col in 0..N {
-            let dot = a[(0, col)] * v[0] + a[(1, col)] * v[1] + a[(2, col)] * v[2] + a[(3, col)] * v[3];
+            let dot =
+                a[(0, col)] * v[0] + a[(1, col)] * v[1] + a[(2, col)] * v[2] + a[(3, col)] * v[3];
             out[col] = tpt_math::clamp(dot, 0.0, 1.0);
         }
         let _ = idx;
@@ -163,7 +172,13 @@ mod tests {
     fn pure_thrust_splits_equally() {
         let m = octo();
         let mut out = [0.0; 8];
-        m.allocate(&ControlCommand { thrust: 0.8, ..Default::default() }, &mut out);
+        m.allocate(
+            &ControlCommand {
+                thrust: 0.8,
+                ..Default::default()
+            },
+            &mut out,
+        );
         for v in out {
             assert!((v - 0.1).abs() < 1e-9, "v={v}");
         }
@@ -173,7 +188,14 @@ mod tests {
     fn roll_differentiates_sides() {
         let m = octo();
         let mut out = [0.0; 8];
-        m.allocate(&ControlCommand { thrust: 0.5, roll: 0.2, ..Default::default() }, &mut out);
+        m.allocate(
+            &ControlCommand {
+                thrust: 0.5,
+                roll: 0.2,
+                ..Default::default()
+            },
+            &mut out,
+        );
         // Right rotors (y>0): indices 0,3,4,7 should exceed left (1,2,5,6).
         let right: f64 = out[0] + out[3] + out[4] + out[7];
         let left: f64 = out[1] + out[2] + out[5] + out[6];
@@ -184,11 +206,25 @@ mod tests {
     fn reallocates_after_single_failure() {
         let mut m = octo();
         let mut out = [0.0; 8];
-        m.allocate(&ControlCommand { thrust: 0.6, yaw: 0.1, ..Default::default() }, &mut out);
+        m.allocate(
+            &ControlCommand {
+                thrust: 0.6,
+                yaw: 0.1,
+                ..Default::default()
+            },
+            &mut out,
+        );
         let before_ok = m.healthy_count() == 8;
         m.fail(0);
         assert_eq!(m.healthy_count(), 7);
-        let ok = m.allocate(&ControlCommand { thrust: 0.6, yaw: 0.1, ..Default::default() }, &mut out);
+        let ok = m.allocate(
+            &ControlCommand {
+                thrust: 0.6,
+                yaw: 0.1,
+                ..Default::default()
+            },
+            &mut out,
+        );
         assert!(before_ok);
         assert!(ok, "7 healthy rotors should still be fully allocatable");
         // Failed rotor must produce no thrust.
@@ -210,7 +246,14 @@ mod tests {
             m.fail(i);
         }
         let mut out = [0.0; 8];
-        let ok = m.allocate(&ControlCommand { thrust: 0.5, roll: 0.3, ..Default::default() }, &mut out);
+        let ok = m.allocate(
+            &ControlCommand {
+                thrust: 0.5,
+                roll: 0.3,
+                ..Default::default()
+            },
+            &mut out,
+        );
         assert!(!ok);
         // Failed rotors zero, others get equal collective split.
         assert_eq!(out[0], 0.0);

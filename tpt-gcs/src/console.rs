@@ -51,7 +51,7 @@ impl ConsoleGcs {
     pub fn send(&mut self, cmd: &Command) -> io::Result<()> {
         let mut buf = [0u8; 128];
         let n = link::serialize_command(cmd, self.seq, &mut buf)
-            .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "command too large"))?;
+            .ok_or_else(|| io::Error::other("command too large"))?;
         self.seq = self.seq.wrapping_add(1);
         self.socket.send_to(&buf[..n], &self.remote)?;
         Ok(())

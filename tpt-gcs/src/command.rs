@@ -18,12 +18,7 @@ pub enum Command {
     /// Begin autonomous landing.
     Land,
     /// Fly to a local-frame waypoint (NED, meters; `yaw` in rad).
-    SetWaypoint {
-        x: f64,
-        y: f64,
-        z: f64,
-        yaw: f64,
-    },
+    SetWaypoint { x: f64, y: f64, z: f64, yaw: f64 },
     /// Request a specific flight mode.
     SetMode(FlightMode),
 }
@@ -36,28 +31,28 @@ impl Command {
     pub fn pack(&self, out: &mut [u8]) -> Option<usize> {
         match self {
             Command::Arm => {
-                if out.len() < 1 {
+                if out.is_empty() {
                     return None;
                 }
                 out[0] = 0;
                 Some(1)
             }
             Command::Disarm => {
-                if out.len() < 1 {
+                if out.is_empty() {
                     return None;
                 }
                 out[0] = 1;
                 Some(1)
             }
             Command::Takeoff => {
-                if out.len() < 1 {
+                if out.is_empty() {
                     return None;
                 }
                 out[0] = 2;
                 Some(1)
             }
             Command::Land => {
-                if out.len() < 1 {
+                if out.is_empty() {
                     return None;
                 }
                 out[0] = 3;
@@ -131,7 +126,12 @@ mod tests {
 
     #[test]
     fn arm_disarm_round_trip() {
-        for c in [Command::Arm, Command::Disarm, Command::Takeoff, Command::Land] {
+        for c in [
+            Command::Arm,
+            Command::Disarm,
+            Command::Takeoff,
+            Command::Land,
+        ] {
             let mut buf = [0u8; Command::MAX_LEN];
             let n = c.pack(&mut buf).unwrap();
             assert_eq!(Command::unpack(&buf[..n]), Some(c));

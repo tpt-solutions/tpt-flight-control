@@ -173,7 +173,12 @@ impl<const CAP: usize> SparseVoxelOctree<CAP> {
 
     /// Query obstacles within an axis-aligned box, writing occupied leaf centers
     /// into `out` (up to `out.len()`). Returns the count written.
-    pub fn query_obstacles(&self, min: Vector3<f64>, max: Vector3<f64>, out: &mut [Vector3<f64>]) -> usize {
+    pub fn query_obstacles(
+        &self,
+        min: Vector3<f64>,
+        max: Vector3<f64>,
+        out: &mut [Vector3<f64>],
+    ) -> usize {
         let mut count = 0usize;
         // Iterative DFS via an explicit stack of (node, center, half, depth).
         // Bound the stack by max_depth*8 to stay allocation-free.
@@ -206,12 +211,12 @@ impl<const CAP: usize> SparseVoxelOctree<CAP> {
                 if !box_overlaps(min, max, cc, ch) {
                     continue;
                 }
-                if usize::from(depth) + 1 == self.max_depth as usize || self.nodes[c].children == [NONE; 8] {
-                    if self.nodes[c].occupied {
-                        if count < out.len() {
-                            out[count] = cc;
-                            count += 1;
-                        }
+                if usize::from(depth) + 1 == self.max_depth as usize
+                    || self.nodes[c].children == [NONE; 8]
+                {
+                    if self.nodes[c].occupied && count < out.len() {
+                        out[count] = cc;
+                        count += 1;
                     }
                 } else if sp < 64 {
                     stack_node[sp] = c;
@@ -230,12 +235,21 @@ impl<const CAP: usize> SparseVoxelOctree<CAP> {
     ///
     /// Uses a simple voxel-stepping traversal (no full DDA) suitable for
     /// obstacle-avoidance queries at modest depths.
-    pub fn raycast(&self, ro: Vector3<f64>, rd: Vector3<f64>, max_dist: f64) -> Option<(Vector3<f64>, f64)> {
+    pub fn raycast(
+        &self,
+        ro: Vector3<f64>,
+        rd: Vector3<f64>,
+        max_dist: f64,
+    ) -> Option<(Vector3<f64>, f64)> {
         if self.free == 0 {
             return None;
         }
         let step = self.leaf_size() * 0.5;
-        let rd_n = if rd.norm() > 1e-9 { rd } else { Vector3::new(0.0, 0.0, 1.0) };
+        let rd_n = if rd.norm() > 1e-9 {
+            rd
+        } else {
+            Vector3::new(0.0, 0.0, 1.0)
+        };
         let mut t = 0.0f64;
         let mut p = ro;
         while t < max_dist {
@@ -280,7 +294,12 @@ fn child_center(center: Vector3<f64>, half: f64, oct: usize) -> Vector3<f64> {
 /// half-extent `h`.
 #[inline]
 fn box_overlaps(min: Vector3<f64>, max: Vector3<f64>, c: Vector3<f64>, h: f64) -> bool {
-    c.x - h <= max.x && c.x + h >= min.x && c.y - h <= max.y && c.y + h >= min.y && c.z - h <= max.z && c.z + h >= min.z
+    c.x - h <= max.x
+        && c.x + h >= min.x
+        && c.y - h <= max.y
+        && c.y + h >= min.y
+        && c.z - h <= max.z
+        && c.z + h >= min.z
 }
 
 #[cfg(test)]
@@ -325,7 +344,11 @@ mod tests {
         let mut t = tree();
         let obs = Vector3::new(0.0, 0.0, 5.0);
         t.insert_point(obs);
-        let hit = t.raycast(Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.0, 0.0, 1.0), 20.0);
+        let hit = t.raycast(
+            Vector3::new(0.0, 0.0, 0.0),
+            Vector3::new(0.0, 0.0, 1.0),
+            20.0,
+        );
         assert!(hit.is_some());
         let (p, d) = hit.unwrap();
         assert!((d - 5.0).abs() < 1.0, "dist {d}");
@@ -335,9 +358,14 @@ mod tests {
     #[test]
     fn raycast_misses_when_empty() {
         let t = tree();
-        assert!(t
-            .raycast(Vector3::new(0.0, 0.0, 0.0), Vector3::new(1.0, 0.0, 0.0), 20.0)
-            .is_none());
+        assert!(
+            t.raycast(
+                Vector3::new(0.0, 0.0, 0.0),
+                Vector3::new(1.0, 0.0, 0.0),
+                20.0
+            )
+            .is_none()
+        );
     }
 }
 
@@ -457,8 +485,14 @@ mod spatial_map_tests {
     fn keyframe_inserts_landmarks_as_obstacles() {
         let mut m = map();
         let lms = [
-            Landmark { position: Vector3::new(1.0, 1.0, 1.0), descriptor: 1 },
-            Landmark { position: Vector3::new(2.0, 2.0, 2.0), descriptor: 2 },
+            Landmark {
+                position: Vector3::new(1.0, 1.0, 1.0),
+                descriptor: 1,
+            },
+            Landmark {
+                position: Vector3::new(2.0, 2.0, 2.0),
+                descriptor: 2,
+            },
         ];
         m.insert_keyframe(Pose6DOF::origin(), &lms).unwrap();
         let bbox = BoundingBox {
@@ -475,8 +509,14 @@ mod spatial_map_tests {
     #[test]
     fn cull_drops_distant_voxels() {
         let mut m = map();
-        let near = [Landmark { position: Vector3::new(1.0, 0.0, 0.0), descriptor: 1 }];
-        let far = [Landmark { position: Vector3::new(9.0, 9.0, 9.0), descriptor: 2 }];
+        let near = [Landmark {
+            position: Vector3::new(1.0, 0.0, 0.0),
+            descriptor: 1,
+        }];
+        let far = [Landmark {
+            position: Vector3::new(9.0, 9.0, 9.0),
+            descriptor: 2,
+        }];
         m.insert_keyframe(Pose6DOF::origin(), &near).unwrap();
         m.insert_keyframe(Pose6DOF::origin(), &far).unwrap();
         assert_eq!(m.retained_points(), 2);

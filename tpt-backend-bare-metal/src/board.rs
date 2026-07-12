@@ -6,17 +6,24 @@
 //! closed-loop supervisor can be exercised in unit tests; on real hardware
 //! these would be populated by the external chip drivers (SPI/I2C).
 
-use crate::hal::{GpioBank, Regs, RegisterInterface};
+use crate::hal::{GpioBank, RegisterInterface, Regs};
 use core::convert::Infallible;
 use tpt_abstractions::{
-    FixType, GeoPosition, Gnss, Imu, Motor, RadarAltimeter,
-    os::Scheduler,
+    CameraIntrinsics, ControlSurface, FixType, FrameMetadata, GeoPosition, Gnss, Imu, LidarSensor,
+    Motor, Point3D, RadarAltimeter, VisualSensor, os::Scheduler,
 };
 use tpt_math::Vector3;
 use tpt_protocols::antispoof::RaimMonitor;
 
 /// Number of motors driven by the board (quad-X).
 pub const MOTOR_COUNT: usize = 4;
+
+/// Number of control-surface channels driven by the board (e.g. elevon/rudder
+/// pairs on an eVTOL or fixed-wing airframe).
+pub const SURFACE_COUNT: usize = 4;
+
+/// Maximum LiDAR/depth points buffered per scan by the board.
+pub const LIDAR_CAPACITY: usize = 64;
 
 /// RAIM position-consensus threshold (m) for flagging a jammed/spoofed GNSS
 /// solution (§19.1).
@@ -47,6 +54,16 @@ pub struct Stm32Board {
     raim: RaimMonitor,
     /// Most recent actuator commands written by the control loop.
     pub motors: [f64; MOTOR_COUNT],
+    /// Most recent control-surface deflections (radians, signed).
+    pub surfaces: [f64; SURFACE_COUNT],
+    /// Downward/forward camera intrinsics used by the VIO front-end.
+    pub cam_intrinsics: CameraIntrinsics,
+    /// Monotonically increasing camera frame sequence number.
+    frame_seq: u64,
+    /// Buffered LiDAR/depth points (body frame, m) from the most recent scan.
+    pub lidar_cloud: [Point3D; LIDAR_CAPACITY],
+    /// Number of valid points in `lidar_cloud`.
+    lidar_count: usize,
 }
 
 impl Stm32Board {
@@ -64,6 +81,18 @@ impl Stm32Board {
             gnss_compromised: false,
             raim: RaimMonitor::new(RAIM_THRESHOLD_M),
             motors: [0.0; MOTOR_COUNT],
+            surfaces: [0.0; SURFACE_COUNT],
+            cam_intrinsics: CameraIntrinsics {
+                fx: 500.0,
+                fy: 500.0,
+                cx: 320.0,
+                cy: 240.0,
+                width: 640,
+                height: 480,
+            },
+            frame_seq: 0,
+            lidar_cloud: [Vector3::zeros(); LIDAR_CAPACITY],
+            lidar_count: 0,
         }
     }
 
@@ -71,6 +100,21 @@ impl Stm32Board {
     pub fn set_stationary_imu(&mut self) {
         self.imu_accel = Vector3::new(0.0, 0.0, 9.81);
         self.imu_gyro = Vector3::zeros();
+    }
+
+    /// Load a LiDAR/depth scan into the board buffer (up to [`LIDAR_CAPACITY`]
+    /// points). Later [`LidarSensor::read_point_cloud`] calls drain from here.
+    /// On real hardware this would be filled by the SPI/Ethernet range sensor
+    /// driver's DMA completion handler.
+    pub fn load_lidar_scan(&mut self, points: &[Point3D]) {
+        let n = points.len().min(LIDAR_CAPACITY);
+        self.lidar_cloud[..n].copy_from_slice(&points[..n]);
+        self.lidar_count = n;
+    }
+
+    /// Number of valid points currently buffered from the last LiDAR scan.
+    pub const fn lidar_len(&self) -> usize {
+        self.lidar_count
     }
 
     /// Feed the RAIM monitor with independent GNSS/constellation position
@@ -148,6 +192,44 @@ impl RadarAltimeter for Stm32Board {
     }
 }
 
+impl VisualSensor for Stm32Board {
+    type Error = Infallible;
+
+    /// Capture a frame into `buffer`. On host this fills the buffer with a
+    /// deterministic ramp (so tests can assert the frame was written) and
+    /// stamps monotonically increasing metadata; on real hardware the camera
+    /// DMA target would be `buffer`.
+    fn capture_frame(&mut self, buffer: &mut [u8]) -> Result<FrameMetadata, Self::Error> {
+        self.frame_seq = self.frame_seq.wrapping_add(1);
+        let want = (self.cam_intrinsics.width as usize)
+            .saturating_mul(self.cam_intrinsics.height as usize);
+        let n = buffer.len().min(want);
+        for (i, b) in buffer[..n].iter_mut().enumerate() {
+            *b = (i as u8).wrapping_add(self.frame_seq as u8);
+        }
+        Ok(FrameMetadata {
+            sequence: self.frame_seq,
+            width: self.cam_intrinsics.width,
+            height: self.cam_intrinsics.height,
+            // Camera frame timestamp derived from the monotonic clock (s).
+            timestamp_s: self.regs.monotonic_micros() as f64 * 1e-6,
+        })
+    }
+
+    fn get_intrinsics(&self) -> &CameraIntrinsics {
+        &self.cam_intrinsics
+    }
+}
+
+impl LidarSensor for Stm32Board {
+    type Error = Infallible;
+    fn read_point_cloud(&mut self, buffer: &mut [Point3D]) -> Result<usize, Self::Error> {
+        let n = buffer.len().min(self.lidar_count);
+        buffer[..n].copy_from_slice(&self.lidar_cloud[..n]);
+        Ok(n)
+    }
+}
+
 impl Scheduler for Stm32Board {
     type Error = Infallible;
     fn monotonic_micros(&self) -> Result<u64, Self::Error> {
@@ -183,6 +265,37 @@ impl Motor for MotorChannel<'_> {
     }
 }
 
+/// Maximum control-surface deflection (radians) the servo hardware can travel.
+/// Commands beyond this are clamped so the linkage is never over-driven.
+pub const SURFACE_TRAVEL_LIMIT: f64 = 0.6109; // ~35 deg
+
+/// A single control-surface (servo) channel bound to a board slot, exposing the
+/// [`ControlSurface`] trait for a fixed-wing / eVTOL surface (elevon, rudder,
+/// flap, ...). Deflection is clamped to +/-[`SURFACE_TRAVEL_LIMIT`].
+pub struct SurfaceChannel<'a> {
+    board: &'a mut Stm32Board,
+    index: usize,
+}
+
+impl<'a> SurfaceChannel<'a> {
+    pub fn new(board: &'a mut Stm32Board, index: usize) -> Self {
+        debug_assert!(index < SURFACE_COUNT);
+        Self { board, index }
+    }
+}
+
+impl ControlSurface for SurfaceChannel<'_> {
+    type Error = Infallible;
+    fn set_deflection(&mut self, radians: f64) -> Result<(), Self::Error> {
+        self.board.surfaces[self.index] =
+            radians.clamp(-SURFACE_TRAVEL_LIMIT, SURFACE_TRAVEL_LIMIT);
+        Ok(())
+    }
+    fn deflection(&self) -> f64 {
+        self.board.surfaces[self.index]
+    }
+}
+
 /// Convenience: enable every peripheral the supervisor depends on.
 pub fn bring_up(board: &mut Stm32Board) {
     crate::hal::init_clocks_and_io(&mut board.regs);
@@ -199,14 +312,20 @@ mod tests {
         // Stationary, level: 1 g along body z, no rotation, quiet mag.
         assert!((b.read_accelerometer().unwrap().z - 9.81).abs() < 1e-9);
         assert_eq!(b.read_gyroscope().unwrap(), Vector3::zeros());
-        assert_eq!(b.read_magnetometer().unwrap(), Vector3::new(25.0, 0.0, 40.0));
+        assert_eq!(
+            b.read_magnetometer().unwrap(),
+            Vector3::new(25.0, 0.0, 40.0)
+        );
     }
 
     #[test]
     fn gnss_trait_contract() {
         let mut b = Stm32Board::new();
         b.gnss_pos = GeoPosition::new(37.0, -122.0, 10.0);
-        assert_eq!(b.read_position().unwrap(), GeoPosition::new(37.0, -122.0, 10.0));
+        assert_eq!(
+            b.read_position().unwrap(),
+            GeoPosition::new(37.0, -122.0, 10.0)
+        );
         assert_eq!(b.get_fix_type(), FixType::Fix3D);
         // No integrity input yet -> not flagged.
         assert!(!b.is_jammed_or_spoofed());
@@ -216,10 +335,7 @@ mod tests {
     fn gnss_jamming_flagged_by_raim() {
         let mut b = Stm32Board::new();
         // Two consistent solutions (GPS + GLONASS) -> no alarm.
-        let good = [
-            Vector3::new(0.0, 0.0, 0.0),
-            Vector3::new(0.1, -0.1, 0.0),
-        ];
+        let good = [Vector3::new(0.0, 0.0, 0.0), Vector3::new(0.1, -0.1, 0.0)];
         b.update_integrity(&good);
         assert!(!b.is_jammed_or_spoofed());
 
@@ -252,5 +368,57 @@ mod tests {
         let t0 = b.monotonic_micros().unwrap();
         // Time is monotonic and non-negative.
         assert!(t0 < b.monotonic_micros().unwrap() || t0 == 0);
+    }
+
+    #[test]
+    fn visual_sensor_trait_contract() {
+        let mut b = Stm32Board::new();
+        // Intrinsics are exposed for the VIO front-end.
+        assert_eq!(b.get_intrinsics().width, 640);
+        let mut frame = [0u8; 32];
+        let m0 = b.capture_frame(&mut frame).unwrap();
+        // The buffer is written and the sequence advances monotonically.
+        assert_eq!(m0.sequence, 1);
+        assert!(frame.iter().any(|&x| x != 0));
+        let m1 = b.capture_frame(&mut frame).unwrap();
+        assert_eq!(m1.sequence, 2);
+        assert_eq!(m1.width, 640);
+        assert_eq!(m1.height, 480);
+    }
+
+    #[test]
+    fn lidar_sensor_trait_contract() {
+        let mut b = Stm32Board::new();
+        // Nothing loaded yet -> reads back zero points.
+        let mut out = [Vector3::zeros(); 8];
+        assert_eq!(b.read_point_cloud(&mut out).unwrap(), 0);
+        // Load a small scan and drain it back through the trait.
+        let scan = [
+            Vector3::new(1.0, 0.0, -2.0),
+            Vector3::new(0.5, 0.5, -2.0),
+            Vector3::new(-1.0, 1.0, -1.5),
+        ];
+        b.load_lidar_scan(&scan);
+        assert_eq!(b.lidar_len(), 3);
+        let n = b.read_point_cloud(&mut out).unwrap();
+        assert_eq!(n, 3);
+        assert_eq!(out[0], scan[0]);
+        assert_eq!(out[2], scan[2]);
+        // A short buffer only receives as many points as it can hold.
+        let mut small = [Vector3::zeros(); 2];
+        assert_eq!(b.read_point_cloud(&mut small).unwrap(), 2);
+    }
+
+    #[test]
+    fn control_surface_trait_contract() {
+        let mut b = Stm32Board::new();
+        let mut s = SurfaceChannel::new(&mut b, 0);
+        s.set_deflection(0.1).unwrap();
+        assert!((s.deflection() - 0.1).abs() < 1e-9);
+        // Over-travel commands are clamped to the servo limit.
+        s.set_deflection(2.0).unwrap();
+        assert!((s.deflection() - SURFACE_TRAVEL_LIMIT).abs() < 1e-9);
+        s.set_deflection(-2.0).unwrap();
+        assert!((s.deflection() + SURFACE_TRAVEL_LIMIT).abs() < 1e-9);
     }
 }

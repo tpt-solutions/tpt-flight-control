@@ -9,9 +9,9 @@
 //! y = east, z = down), body `x` = forward, `y` = right, `z` = down, and the
 //! attitude quaternion rotates body → world.
 
+use libm::cos;
 use tpt_abstractions::GeoPosition;
 use tpt_math::{UnitQuaternion, Vector3, clamp};
-use libm::cos;
 
 /// Earth parameters for the local NED frame.
 const EARTH_RADIUS_M: f64 = 6_378_137.0;
@@ -61,12 +61,7 @@ impl GpsInsNavigator {
     /// `accel` is the specific force in body frame (m/s^2, z down positive at
     /// rest, per the stack convention), `quat` the current body→world NED
     /// attitude, `dt` the step (s).
-    pub fn propagate(
-        &mut self,
-        accel: Vector3<f64>,
-        quat: &UnitQuaternion<f64>,
-        dt: f64,
-    ) {
+    pub fn propagate(&mut self, accel: Vector3<f64>, quat: &UnitQuaternion<f64>, dt: f64) {
         if dt <= 0.0 {
             return;
         }
@@ -140,8 +135,16 @@ mod tests {
             nav.propagate(accel, &q, dt);
         }
         // After 1 s: vel ~ (1,0,0), pos ~ (0.5,0,0) (semi-implicit Euler).
-        assert!((nav.velocity().x - 1.0).abs() < 1e-6, "vel {:?}", nav.velocity());
-        assert!((nav.position().x - 0.5).abs() < 0.01, "pos {:?}", nav.position());
+        assert!(
+            (nav.velocity().x - 1.0).abs() < 1e-6,
+            "vel {:?}",
+            nav.velocity()
+        );
+        assert!(
+            (nav.position().x - 0.5).abs() < 0.01,
+            "pos {:?}",
+            nav.position()
+        );
     }
 
     #[test]
@@ -159,7 +162,11 @@ mod tests {
             nav.correct_position(Vector3::zeros());
             nav.propagate(Vector3::new(0.0, 0.0, 9.81 + 0.5), &q, 0.001);
         }
-        assert!(nav.position().norm() < 0.3, "recovered {:?}", nav.position());
+        assert!(
+            nav.position().norm() < 0.3,
+            "recovered {:?}",
+            nav.position()
+        );
     }
 
     #[test]

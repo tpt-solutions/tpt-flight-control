@@ -13,8 +13,8 @@
 use tpt_abstractions::{Gnss, Imu, RadarAltimeter, os::RateGroup, os::RateGroups, os::Scheduler};
 use tpt_core::{
     AttitudeController, AttitudeSetpoint, EnvelopeConfig, EnvelopeProtector, FlightStateMachine,
-    PositionController, PositionTarget, VehicleState, guidance::PositionGains,
-    TimeTriggeredScheduler,
+    PositionController, PositionTarget, TimeTriggeredScheduler, VehicleState,
+    guidance::PositionGains,
 };
 use tpt_math::Vector3;
 use tpt_mixer::{ControlCommand, MotorMixer, QuadXMixer};
@@ -147,12 +147,9 @@ where
         self.mixer.mix(&cmd, &mut motors);
 
         // 8) Flight mode progression (arm -> takeoff -> position hold).
-        match self.fsm.mode() {
-            tpt_core::FlightMode::Disarmed => {
-                let _ = self.fsm.handle(tpt_core::FlightEvent::Arm);
-                let _ = self.fsm.handle(tpt_core::FlightEvent::CommandTakeoff);
-            }
-            _ => {}
+        if self.fsm.mode() == tpt_core::FlightMode::Disarmed {
+            let _ = self.fsm.handle(tpt_core::FlightEvent::Arm);
+            let _ = self.fsm.handle(tpt_core::FlightEvent::CommandTakeoff);
         }
 
         motors

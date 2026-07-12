@@ -7,13 +7,15 @@
 //! - **Map integrity** — signed terrain/map manifests (§19.1). See [`integrity`].
 //! - **GNSS anti-spoofing** — RAIM + authenticated tokens (§19.1). See [`antispoof`].
 //! - **ARINC 429 / AFDX** — transport-category integration (Phase 5, placeholder).
+//! - **Companion offload** — Local Pose + Obstacle Cloud over TPT-Link (§8.1/§8.3). See [`companion`].
 
 #![no_std]
 
-pub mod mavlink;
-pub mod tptlink;
-pub mod sha256;
-pub mod chacha;
-pub mod integrity;
 pub mod antispoof;
 pub mod arinc;
+pub mod chacha;
+pub mod companion;
+pub mod integrity;
+pub mod mavlink;
+pub mod sha256;
+pub mod tptlink;

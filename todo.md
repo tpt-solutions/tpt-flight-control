@@ -76,7 +76,7 @@ Derived from `spec.txt` (v0.2.0-DRAFT). High-level milestone tracking across the
 - [x] Implement tilt-rotor hover-to-cruise transition logic (`TiltRotor`/`TiltPhase`, feature-gated `mixer-tilt`)
 - [x] Implement LiDAR SLAM backend (ICP/NDT scan matching) in `tpt-mapping/slam` (`ScanMatcher::icp_2d` + `KeyframeGraph`; 2D ICP only so far, no NDT/3D yet)
 - [x] Implement Terrain-Aided Navigation / TERCOM in `tpt-mapping/tan` (`Tercom::correlate`)
-- [ ] Implement companion-compute offload path (Local Pose + Obstacle Cloud over Ethernet/UDP or PCIe) for Jetson/Orin
+- [x] Implement companion-compute offload path (Local Pose + Obstacle Cloud over Ethernet/UDP or PCIe) for Jetson/Orin (`tpt-protocols::companion`: `LocalPose`/`ObstacleCloud` framed on the TPT-Link `Map` channel — plain CRC or ChaCha20-Poly1305 — with `ObstacleCloud::ingest_into` bridging a received cloud into any `SpatialMap`; 6/6 tests pass)
 - [x] Implement `tpt-backend-pikeos` (PikeOS, ARINC 653 partitioning) (`partition.rs`: `Partition`/`SamplingPort`/`QueuingPort`/`PikeOsScheduler`/`PikeOsBackend`, 5/5 tests passing)
 - [x] Implement TPT-Link zero-copy binary telemetry protocol (`tptlink`: plain and ChaCha20-Poly1305-encrypted framing both work; `encrypted_round_trip` passes)
 - [ ] Begin DO-178C DAL-C certification engagement with an eVTOL partner
@@ -91,7 +91,7 @@ Derived from `spec.txt` (v0.2.0-DRAFT). High-level milestone tracking across the
 - [ ] Formally verify `tpt-mapping` (VIO/SLAM/TAN bounds) using Kani/Creusot
 - [x] Implement Map Data Integrity signing (cryptographic signatures on terrain/map databases, §19.1) (`integrity`: `MapManifest`, `build_manifest`/`sign`/`verify` over SHA-256 root hash)
 - [x] Implement GNSS anti-spoofing integrity monitoring (§19.1) (`antispoof`: `RaimMonitor` fault detection, `GnssAuth` sign/verify tokens)
-- [ ] Implement authenticated encryption (ChaCha20-Poly1305) for all comm links — Poly1305 MAC now matches the RFC 8439 test vector (`chacha::tests::poly1305_rfc8439` and `tptlink::tests::encrypted_round_trip` both pass); still only wired into `tptlink`, not `mavlink`
+- [x] Implement authenticated encryption (ChaCha20-Poly1305) for all comm links — Poly1305 MAC now matches the RFC 8439 test vector (`chacha::tests::poly1305_rfc8439` and `tptlink::tests::encrypted_round_trip` both pass); now wired into both `tptlink` and `mavlink` (`mavlink::serialize_encrypted`/`parse_encrypted` via the `INCOMPAT_FLAG_ENCRYPTED` header bit; `mavlink::tests::encrypted_round_trip`, `encrypted_rejects_wrong_key`, `encrypted_rejects_tampered_header` pass)
 - [ ] **Milestone: TPT Sovereign stack demonstrated for defense application**
 
 ## Phase 5: Transport Category (Years 5+)
@@ -114,13 +114,13 @@ Derived from `spec.txt` (v0.2.0-DRAFT). High-level milestone tracking across the
 - [ ] Maintain `reference-hardware/` KiCad designs for open flight computers
 - [ ] Track commercial/certification artifact packaging in `certification/` separately from open-source core
   - [x] Build requirements traceability matrix (`spec.txt` requirement → implementation → test) in `certification/traceability/` — covers `tpt-abstractions`, `tpt-math`, `tpt-core`, `tpt-sensor-fusion`, `tpt-mixer`, `tpt-mapping`; see `certification/traceability/matrix.md` for the full gap list
-  - [ ] Extend the traceability matrix to `tpt-protocols`, `tpt-gcs`, `tpt-sim`, backend crates, and `tpt-sovereign-toolchain`
-  - [ ] Implement `SpatialMap` for `tpt-mapping`'s octree/VIO/SLAM keyframe map (currently free-standing modules, no implementer wires them behind the trait)
-  - [ ] Implement `TerrainDatabase` for TAN's DEM access (`Tercom::correlate` currently takes a raw closure instead of the trait)
-  - [ ] Implement `VisualSensor`/`LidarSensor`/`RadarAltimeter` backends, or confirm they're intentionally bypassed and update the traits/spec accordingly
-  - [ ] Implement `ControlSurface` for a fixed-wing/eVTOL surface backend (no implementer yet)
-  - [ ] Wire `Gnss::is_jammed_or_spoofed()` to the existing `tpt-protocols::antispoof::RaimMonitor` RAIM detection logic (algorithm exists and is tested, just not plumbed through the trait method)
-  - [ ] Add unit/HIL tests for the `Imu`/`Gnss`/`Motor`/`Scheduler` trait implementations in `tpt-backend-bare-metal::board` (implemented but untested against the trait contract)
-  - [ ] Add independent test coverage for `EnvelopeProtector::is_violated`'s attitude/rate/Vne violation paths (currently only the climb-rate path is exercised)
-  - [ ] Write a Software Accomplishment Summary tracking DO-178C Annex A objective status, building on the traceability matrix
-  - [ ] Document the clippy/rustfmt/`cargo-audit` CI pipeline as qualified development tools (DO-330-style tool qualification notes)
+  - [x] Extend the traceability matrix to `tpt-protocols`, `tpt-gcs`, `tpt-sim`, backend crates, and `tpt-sovereign-toolchain` (matrix now covers all crates, including the companion-offload path and the newly-wired sensor/actuator traits)
+  - [x] Implement `SpatialMap` for `tpt-mapping`'s octree/VIO/SLAM keyframe map (`OctreeSpatialMap` over the SVO + `SlamSpatialMap` over the keyframe graph; both tested)
+  - [x] Implement `TerrainDatabase` for TAN's DEM access (`DemFn`/`DemGrid` implement the trait; `Tercom::correlate_db` runs TERCOM against any `TerrainDatabase` instead of a raw closure)
+  - [x] Implement `VisualSensor`/`LidarSensor`/`RadarAltimeter` backends, or confirm they're intentionally bypassed and update the traits/spec accordingly (all three implemented + tested on `tpt-backend-bare-metal::board::Stm32Board`)
+  - [x] Implement `ControlSurface` for a fixed-wing/eVTOL surface backend (`tpt-backend-bare-metal::board::SurfaceChannel`, clamped to servo travel limit; tested)
+  - [x] Wire `Gnss::is_jammed_or_spoofed()` to the existing `tpt-protocols::antispoof::RaimMonitor` RAIM detection logic (`Stm32Board::update_integrity` feeds multi-constellation solutions into the monitor; `is_jammed_or_spoofed` returns the RAIM alarm; tested)
+  - [x] Add unit/HIL tests for the `Imu`/`Gnss`/`Motor`/`Scheduler` trait implementations in `tpt-backend-bare-metal::board` (plus `VisualSensor`/`LidarSensor`/`ControlSurface`; 10/10 board tests pass)
+  - [x] Add independent test coverage for `EnvelopeProtector::is_violated`'s attitude/rate/Vne violation paths (each path now independently exercised)
+  - [x] Write a Software Accomplishment Summary tracking DO-178C Annex A objective status, building on the traceability matrix (`certification/software-accomplishment-summary.md`)
+  - [x] Document the clippy/rustfmt/`cargo-audit` CI pipeline as qualified development tools (DO-330-style tool qualification notes) (`certification/ci-qualification.md`)

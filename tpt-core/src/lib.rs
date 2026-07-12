@@ -23,20 +23,20 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-pub mod pid;
-pub mod envelope;
-pub mod scheduler;
-pub mod fsm;
 pub mod control;
+pub mod envelope;
+pub mod fsm;
 pub mod guidance;
-pub mod state;
 pub mod nav;
+pub mod pid;
+pub mod scheduler;
+pub mod state;
 
-pub use pid::Pid;
-pub use envelope::{EnvelopeConfig, EnvelopeProtector};
-pub use scheduler::TimeTriggeredScheduler;
-pub use fsm::{FlightEvent, FlightMode, FlightStateMachine};
 pub use control::AttitudeController;
+pub use envelope::{EnvelopeConfig, EnvelopeProtector};
+pub use fsm::{FlightEvent, FlightMode, FlightStateMachine};
 pub use guidance::PositionController;
-pub use state::{AttitudeSetpoint, PositionTarget, VehicleState, VelocitySetpoint};
 pub use nav::GpsInsNavigator;
+pub use pid::Pid;
+pub use scheduler::TimeTriggeredScheduler;
+pub use state::{AttitudeSetpoint, PositionTarget, VehicleState, VelocitySetpoint};

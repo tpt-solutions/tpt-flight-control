@@ -68,7 +68,13 @@ impl FusionMode {
     ///
     /// Priority: GPS if healthy; else terrain if available and INS drift low;
     /// else visual/depth if available; else coast.
-    pub fn select(gps: SourceStatus, vio: SourceStatus, depth: SourceStatus, terrain: SourceStatus, ins_drift_m: f64) -> FusionMode {
+    pub fn select(
+        gps: SourceStatus,
+        vio: SourceStatus,
+        depth: SourceStatus,
+        terrain: SourceStatus,
+        ins_drift_m: f64,
+    ) -> FusionMode {
         // A healthy GPS is the primary source.
         if gps == SourceStatus::Healthy {
             return FusionMode::GpsAided;
@@ -246,16 +252,18 @@ mod tests {
         fsm.tick(10.0, 0.0);
         assert_eq!(fsm.mode(), FusionMode::Coast);
         // A coalesced health check needs an EKF; just assert mode gating logic.
-        assert!(!NavHealth {
-            mode: FusionMode::Coast,
-            gps: SourceStatus::Lost,
-            vio: SourceStatus::Lost,
-            depth: SourceStatus::Lost,
-            terrain: SourceStatus::Lost,
-            horiz_uncert_m: 0.1,
-            vert_uncert_m: 0.1,
-            time_since_aiding_s: 10.0,
-        }
-        .is_navigable());
+        assert!(
+            !NavHealth {
+                mode: FusionMode::Coast,
+                gps: SourceStatus::Lost,
+                vio: SourceStatus::Lost,
+                depth: SourceStatus::Lost,
+                terrain: SourceStatus::Lost,
+                horiz_uncert_m: 0.1,
+                vert_uncert_m: 0.1,
+                time_since_aiding_s: 10.0,
+            }
+            .is_navigable()
+        );
     }
 }

@@ -12,7 +12,10 @@ fn main() {
     let p = hover.plant();
     println!(
         "hover          -> pos = ({:.2}, {:.2}, {:.2}) m, |att| = {:.3} rad",
-        p.pos.x, p.pos.y, p.pos.z, hover.max_attitude_seen()
+        p.pos.x,
+        p.pos.y,
+        p.pos.z,
+        hover.max_attitude_seen()
     );
 
     // 2) Recover from an initial attitude disturbance.
@@ -21,7 +24,10 @@ fn main() {
     let p = rec.plant();
     println!(
         "recover        -> pos = ({:.2}, {:.2}, {:.2}) m, final att = {:.3} rad",
-        p.pos.x, p.pos.y, p.pos.z, rec.attitude().0
+        p.pos.x,
+        p.pos.y,
+        p.pos.z,
+        rec.attitude().0
     );
 
     // 3) Fly to a waypoint (5, 5, 2 m above origin).
@@ -35,7 +41,10 @@ fn main() {
     let p = wp.plant();
     println!(
         "waypoint (5,5) -> pos = ({:.2}, {:.2}, {:.2}) m, |att| = {:.3} rad",
-        p.pos.x, p.pos.y, p.pos.z, wp.max_attitude_seen()
+        p.pos.x,
+        p.pos.y,
+        p.pos.z,
+        wp.max_attitude_seen()
     );
 
     println!("Simulation scenarios complete.");

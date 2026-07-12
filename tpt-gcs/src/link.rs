@@ -56,7 +56,9 @@ pub fn parse_telemetry(buf: &[u8]) -> Option<Telemetry> {
     if header.msgid != TELEMETRY_MSGID || payload.len() < 42 {
         return None;
     }
-    let f = |i: usize| f32::from_le_bytes([payload[i], payload[i + 1], payload[i + 2], payload[i + 3]]) as f64;
+    let f = |i: usize| {
+        f32::from_le_bytes([payload[i], payload[i + 1], payload[i + 2], payload[i + 3]]) as f64
+    };
     let mode = match payload[40] {
         0 => FlightMode::Disarmed,
         1 => FlightMode::Armed,

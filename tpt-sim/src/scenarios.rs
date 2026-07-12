@@ -25,9 +25,7 @@ use tpt_core::{
 };
 use tpt_math::{UnitQuaternion, Vector3};
 use tpt_mixer::{ControlCommand, MotorMixer, QuadXMixer};
-use tpt_sensor_fusion::{
-    ComplementaryAhrs, FusionMode, FusionStateMachine, InsEkf, SourceStatus,
-};
+use tpt_sensor_fusion::{ComplementaryAhrs, FusionMode, FusionStateMachine, InsEkf, SourceStatus};
 
 /// Hover collective thrust command.
 const HOVER_THRUST: f64 = 0.5;
@@ -242,7 +240,7 @@ impl ObstacleField {
             let to = pos - s.center;
             let d = to.norm();
             let surf = d - s.radius;
-            if best.as_ref().map_or(true, |(_, bd)| surf < *bd) {
+            if best.as_ref().is_none_or(|(_, bd)| surf < *bd) {
                 let dir = if d > 1e-6 {
                     to / d
                 } else {
@@ -258,12 +256,7 @@ impl ObstacleField {
     ///
     /// When `pos` is within `lookahead + radius` of an obstacle, pushes the
     /// aim point directly away from the obstacle (horizontal plane).
-    pub fn avoidance_offset(
-        &self,
-        pos: Vector3<f64>,
-        lookahead: f64,
-        gain: f64,
-    ) -> Vector3<f64> {
+    pub fn avoidance_offset(&self, pos: Vector3<f64>, lookahead: f64, gain: f64) -> Vector3<f64> {
         let mut offset = Vector3::zeros();
         for s in &self.spheres[..self.count] {
             let to = pos - s.center;
@@ -480,7 +473,8 @@ impl GpsDeniedSim {
                         noise(self.tick as f64 * 0.3 + 2.0, v.pos_noise),
                     );
                 let vyaw = yaw + noise(self.tick as f64 * 0.3 + 3.0, v.yaw_noise);
-                self.ekf.correct_vio(vpos, vyaw, v.pos_noise, v.yaw_noise, dt * 5.0);
+                self.ekf
+                    .correct_vio(vpos, vyaw, v.pos_noise, v.yaw_noise, dt * 5.0);
                 self.fusion.note_aiding();
             }
 

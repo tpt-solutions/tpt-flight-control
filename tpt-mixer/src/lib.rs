@@ -10,10 +10,10 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-#[cfg(feature = "mixer-quad")]
-pub mod quad_x;
 #[cfg(feature = "mixer-dep")]
 pub mod dep;
+#[cfg(feature = "mixer-quad")]
+pub mod quad_x;
 #[cfg(feature = "mixer-dep")]
 pub use dep::{DepMixer, Rotor};
 #[cfg(feature = "mixer-tilt")]

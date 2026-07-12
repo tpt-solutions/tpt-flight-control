@@ -95,12 +95,7 @@ impl GnssAuth {
     }
 
     /// Verify a token against the claimed `pos`/`tow` and `key`.
-    pub fn verify(
-        token: &GnssToken,
-        pos: Vector3<f64>,
-        tow_s: u32,
-        key: &[u8; 32],
-    ) -> bool {
+    pub fn verify(token: &GnssToken, pos: Vector3<f64>, tow_s: u32, key: &[u8; 32]) -> bool {
         let expected = Self::sign(pos, Vector3::zeros(), tow_s, key);
         let mut diff = 0u8;
         for i in 0..32 {
@@ -147,7 +142,12 @@ mod tests {
         let token = GnssAuth::sign(pos, Vector3::zeros(), 12345, &key);
         assert!(GnssAuth::verify(&token, pos, 12345, &key));
         // Wrong position is rejected.
-        assert!(!GnssAuth::verify(&token, Vector3::new(12.4, -4.5, 9.8), 12345, &key));
+        assert!(!GnssAuth::verify(
+            &token,
+            Vector3::new(12.4, -4.5, 9.8),
+            12345,
+            &key
+        ));
         // Wrong key is rejected.
         assert!(!GnssAuth::verify(&token, pos, 12345, &[0u8; 32]));
     }

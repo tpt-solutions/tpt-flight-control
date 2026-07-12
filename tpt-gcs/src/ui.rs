@@ -70,9 +70,7 @@ impl eframe::App for GcsApp {
             ));
             ui.label(format!(
                 "Position: N {:.2} E {:.2} alt {:.2} m",
-                t.position.x,
-                t.position.y,
-                -t.position.z
+                t.position.x, t.position.y, -t.position.z
             ));
             ui.label(format!("Battery: {:.1}%", t.battery * 100.0));
             ui.separator();

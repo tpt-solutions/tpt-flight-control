@@ -135,7 +135,12 @@ impl Sim {
         if self.tick % 2000 == 0 {
             eprintln!(
                 "dbg tick {} thrust {:.3} roll {:.3} pitch {:.3} z {:.3} vz {:.3}",
-                self.tick, setpoint.thrust, setpoint.roll, setpoint.pitch, self.plant.pos.z, self.plant.vel.z
+                self.tick,
+                setpoint.thrust,
+                setpoint.roll,
+                setpoint.pitch,
+                self.plant.pos.z,
+                self.plant.vel.z
             );
         }
 

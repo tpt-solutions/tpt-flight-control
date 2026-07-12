@@ -61,7 +61,13 @@ impl Tercom {
     ///
     /// Returns the north/east offset (m) of the best match. The offset is added
     /// to `origin` to obtain the corrected position.
-    pub fn correlate<F>(&self, profile: &[f64], origin_n: f64, origin_e: f64, dem: F) -> Vector2<f64>
+    pub fn correlate<F>(
+        &self,
+        profile: &[f64],
+        origin_n: f64,
+        origin_e: f64,
+        dem: F,
+    ) -> Vector2<f64>
     where
         F: Fn(f64, f64) -> f64,
     {
@@ -76,6 +82,56 @@ impl Tercom {
                     let north = origin_n + dn + (i as f64) * self.profile_spacing_m;
                     let east = origin_e + de;
                     let pred = dem(north, east);
+                    mad += (meas - pred).abs();
+                }
+                mad /= profile.len().max(1) as f64;
+                if mad < best_mad {
+                    best_mad = mad;
+                    best = Vector2::new(dn, de);
+                }
+                dn += self.step_m;
+            }
+            de += self.step_m;
+        }
+        best
+    }
+
+    /// Correlate `profile` against a [`TerrainDatabase`] instead of a raw
+    /// closure. `origin` is the INS-estimated geodetic start of the measured,
+    /// north-heading track; the returned north/east offset (m) is the TERCOM
+    /// correction to add to the local-frame position.
+    ///
+    /// This is the trait-driven entry point for onboard TAN: the DEM is any
+    /// `TerrainDatabase` implementer (`DemGrid` in flash, `DemFn` in SITL), so
+    /// the correlator no longer needs to know how elevations are stored.
+    pub fn correlate_db<D>(&self, profile: &[f64], origin: GeoPosition, db: &D) -> Vector2<f64>
+    where
+        D: TerrainDatabase,
+    {
+        // Meters-per-degree of longitude at the track origin (equirectangular).
+        let cos_lat = clampf(cos(to_rad(origin.lat_deg)), 1e-6, f64::INFINITY);
+        let m_per_deg_lon = M_PER_DEG_LAT * cos_lat;
+        let to_latlon = |north_m: f64, east_m: f64| {
+            (
+                origin.lat_deg + north_m / M_PER_DEG_LAT,
+                origin.lon_deg + east_m / m_per_deg_lon,
+            )
+        };
+
+        let mut best = Vector2::new(0.0, 0.0);
+        let mut best_mad = f64::MAX;
+        let mut de = -self.search_radius_m;
+        while de <= self.search_radius_m + 1e-9 {
+            let mut dn = -self.search_radius_m;
+            while dn <= self.search_radius_m + 1e-9 {
+                let mut mad = 0.0;
+                for (i, &meas) in profile.iter().enumerate() {
+                    let north = dn + (i as f64) * self.profile_spacing_m;
+                    let east = de;
+                    let (lat, lon) = to_latlon(north, east);
+                    // Infallible DEM access; degrade to a large residual on error
+                    // so that grid cell is never selected.
+                    let pred = db.get_elevation(lat, lon).unwrap_or(f64::MAX / 2.0);
                     mad += (meas - pred).abs();
                 }
                 mad /= profile.len().max(1) as f64;
@@ -130,7 +186,7 @@ where
         if side == 0 {
             return Ok((0, 0));
         }
-        let cos_lat = clampf(cos(to_rad(center.lat_deg)), 1e-6, core::f64::INFINITY);
+        let cos_lat = clampf(cos(to_rad(center.lat_deg)), 1e-6, f64::INFINITY);
         let m_per_deg_lon = M_PER_DEG_LAT * cos_lat;
         let step = if side > 1 {
             (2.0 * radius_m) / (side as f64 - 1.0)
@@ -191,7 +247,7 @@ impl<const N: usize> DemGrid<N> {
     /// Bilinear sample of the stored grid at `lat`/`lon` (m). Clamps to edges.
     pub fn sample(&self, lat: f64, lon: f64) -> f64 {
         let dn = (lat - self.origin_lat) * M_PER_DEG_LAT;
-        let cos_lat = clampf(cos(to_rad(self.origin_lat)), 1e-6, core::f64::INFINITY);
+        let cos_lat = clampf(cos(to_rad(self.origin_lat)), 1e-6, f64::INFINITY);
         let de = (lon - self.origin_lon) * (M_PER_DEG_LAT * cos_lat);
         let fr = clampf(dn / self.cell_m, 0.0, (self.rows - 1) as f64);
         let fc = clampf(de / self.cell_m, 0.0, (self.cols - 1) as f64);
@@ -228,7 +284,7 @@ impl<const N: usize> TerrainDatabase for DemGrid<N> {
         if side == 0 {
             return Ok((0, 0));
         }
-        let cos_lat = clampf(cos(to_rad(center.lat_deg)), 1e-6, core::f64::INFINITY);
+        let cos_lat = clampf(cos(to_rad(center.lat_deg)), 1e-6, f64::INFINITY);
         let m_per_deg_lon = M_PER_DEG_LAT * cos_lat;
         let step = if side > 1 {
             (2.0 * radius_m) / (side as f64 - 1.0)
@@ -265,6 +321,7 @@ mod tests {
         let spacing = 2.0;
         let n = 30usize;
         let mut profile = alloc_array(n);
+        #[allow(clippy::needless_range_loop)]
         for i in 0..n {
             let north = origin.0 + true_offset.x + (i as f64) * spacing;
             let east = origin.1 + true_offset.y;
@@ -272,6 +329,34 @@ mod tests {
         }
         let tercom = Tercom::new(20.0, 1.0, spacing);
         let est = tercom.correlate(&profile, origin.0, origin.1, dem);
+        assert!((est.x - true_offset.x).abs() < 1.5, "dn {}", est.x);
+        assert!((est.y - true_offset.y).abs() < 1.5, "de {}", est.y);
+    }
+
+    #[test]
+    fn correlate_db_recovers_offset_via_trait() {
+        // DEM expressed as a function of geodetic coordinates (SITL `DemFn`).
+        let origin = GeoPosition::new(37.0, -122.0, 0.0);
+        let cos_lat = cos(to_rad(37.0));
+        let db = DemFn::new(|lat: f64, lon: f64| {
+            let n = (lat - 37.0) * M_PER_DEG_LAT;
+            let e = (lon + 122.0) * M_PER_DEG_LAT * cos(to_rad(37.0));
+            0.01 * n + 0.02 * e + 0.0005 * (n * n + e * e)
+        });
+        let true_offset = Vector2::new(8.0, -6.0);
+        let spacing = 2.0;
+        let n = 30usize;
+        let mut profile = [0.0f64; 30];
+        #[allow(clippy::needless_range_loop)]
+        for i in 0..n {
+            let north = true_offset.x + (i as f64) * spacing;
+            let east = true_offset.y;
+            let lat = 37.0 + north / M_PER_DEG_LAT;
+            let lon = -122.0 + east / (M_PER_DEG_LAT * cos_lat);
+            profile[i] = db.get_elevation(lat, lon).unwrap();
+        }
+        let tercom = Tercom::new(20.0, 1.0, spacing);
+        let est = tercom.correlate_db(&profile, origin, &db);
         assert!((est.x - true_offset.x).abs() < 1.5, "dn {}", est.x);
         assert!((est.y - true_offset.y).abs() < 1.5, "de {}", est.y);
     }
@@ -286,7 +371,9 @@ mod tests {
         let (rows, cols) = dem.get_terrain_patch(center, 10.0, &mut patch).unwrap();
         assert_eq!((rows, cols), (5, 5));
         // The center cell samples the DEM at the center coordinate.
-        assert!((patch[12] - dem.get_elevation(center.lat_deg, center.lon_deg).unwrap()).abs() < 1e-9);
+        assert!(
+            (patch[12] - dem.get_elevation(center.lat_deg, center.lon_deg).unwrap()).abs() < 1e-9
+        );
     }
 
     #[test]
@@ -299,7 +386,9 @@ mod tests {
         let lon = 2.0 / 111_320.0;
         assert!((grid.get_elevation(lat, lon).unwrap() - 22.0).abs() < 1e-6);
         let mut patch = [0.0f64; 9];
-        let (r, c) = grid.get_terrain_patch(GeoPosition::new(0.0, 0.0, 0.0), 1.0, &mut patch).unwrap();
+        let (r, c) = grid
+            .get_terrain_patch(GeoPosition::new(0.0, 0.0, 0.0), 1.0, &mut patch)
+            .unwrap();
         assert_eq!((r, c), (3, 3));
         // Center of a 3x3 patch (radius 1 m) maps back to the grid origin cell.
         assert!((patch[4]).abs() < 1e-9);
@@ -307,10 +396,12 @@ mod tests {
 }
 
 /// Fixed-capacity f64 array helper for tests (no alloc).
+#[cfg(test)]
 fn alloc_array(n: usize) -> heapless::Vec64 {
     heapless::Vec64::new(n)
 }
 
+#[cfg(test)]
 mod heapless {
     pub struct Vec64 {
         buf: [f64; 64],
@@ -322,9 +413,6 @@ mod heapless {
                 buf: [0.0; 64],
                 len: n.min(64),
             }
-        }
-        pub fn len(&self) -> usize {
-            self.len
         }
     }
     impl core::ops::Index<usize> for Vec64 {

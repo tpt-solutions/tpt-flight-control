@@ -131,6 +131,11 @@ impl VxTask {
         self.priority
     }
 
+    /// The rate group this task belongs to.
+    pub const fn rate(&self) -> RateGroup {
+        self.rate
+    }
+
     /// Whether the task is currently runnable.
     pub const fn runnable(&self) -> bool {
         self.runnable
@@ -224,7 +229,11 @@ impl VxWorksBackend {
                 VxTask::new(3, 3, RateGroup::R10Hz),
                 VxTask::new(4, 4, RateGroup::R1Hz),
             ],
-            queues: [MessageQueue::new(), MessageQueue::new(), MessageQueue::new()],
+            queues: [
+                MessageQueue::new(),
+                MessageQueue::new(),
+                MessageQueue::new(),
+            ],
             scheduler: VxWorksScheduler::new(),
             health: [PartitionHealth::Healthy; 5],
         }
@@ -289,7 +298,6 @@ impl Default for VxWorksBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use RateGroup;
 
     #[test]
     fn queue_round_trip() {

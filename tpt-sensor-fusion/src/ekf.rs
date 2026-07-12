@@ -46,11 +46,11 @@ fn rotate(q: &UnitQuaternion<f64>, v: &Vector3<f64>) -> Vector3<f64> {
 #[derive(Debug, Clone)]
 pub struct InsEkf {
     // Nominal state.
-    pos: Vector3<f64>,                 // NED position (m)
-    vel: Vector3<f64>,                 // NED velocity (m/s)
-    quat: UnitQuaternion<f64>,         // body -> world (NED)
-    accel_bias: Vector3<f64>,         // body frame (m/s^2)
-    gyro_bias: Vector3<f64>,           // body frame (rad/s)
+    pos: Vector3<f64>,         // NED position (m)
+    vel: Vector3<f64>,         // NED velocity (m/s)
+    quat: UnitQuaternion<f64>, // body -> world (NED)
+    accel_bias: Vector3<f64>,  // body frame (m/s^2)
+    gyro_bias: Vector3<f64>,   // body frame (rad/s)
     // Error-state covariance (always reset to P0 between measurements).
     p: SMatrix<f64, N, N>,
     /// `true` when the attitude was supplied externally (e.g. by
@@ -142,8 +142,7 @@ impl InsEkf {
         // drift away from the source every step.
         if !self.attitude_seeded {
             let dq = UnitQuaternion::from_scaled_axis(omega * dt);
-            self.quat =
-                UnitQuaternion::new_normalize(self.quat.quaternion() * dq.quaternion());
+            self.quat = UnitQuaternion::new_normalize(self.quat.quaternion() * dq.quaternion());
         }
         self.attitude_seeded = false;
 

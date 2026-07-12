@@ -5,7 +5,7 @@
 //! captures a Merkle-style root hash over the map tiles plus an HMAC-SHA256
 //! signature over that root, issued by the (offline) signing authority.
 
-use crate::sha256::{hmac_sha256, Sha256};
+use crate::sha256::{Sha256, hmac_sha256};
 
 /// A signed map manifest.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -62,8 +62,8 @@ pub fn verify(manifest: &MapManifest, tiles: &[&[u8]], key: &[u8; 32]) -> bool {
     let expected = sign(&root_hash, key);
     // Constant-time-ish comparison.
     let mut diff = 0u8;
-    for i in 0..32 {
-        diff |= expected[i] ^ manifest.signature[i];
+    for (e, s) in expected.iter().zip(manifest.signature.iter()) {
+        diff |= e ^ s;
     }
     diff == 0
 }
