@@ -145,7 +145,7 @@ impl Poly1305 {
             self.buflen += take;
             if self.buflen == 16 {
                 let b = self.buf;
-                self.block(&b);
+                self.block(&b, 16);
                 self.buflen = 0;
             }
             data = &data[take..];
@@ -153,7 +153,7 @@ impl Poly1305 {
         while data.len() >= 16 {
             let mut b = [0u8; 16];
             b.copy_from_slice(&data[..16]);
-            self.block(&b);
+            self.block(&b, 16);
             data = &data[16..];
         }
         if !data.is_empty() {
@@ -162,39 +162,19 @@ impl Poly1305 {
         }
     }
 
-    /// Process one full 16-byte block `b` (the implicit 2^128 term appended).
-    fn block(&mut self, b: &[u8; 16]) {
-        // Load the 16 message bytes into five 26-bit limbs (little-endian),
-        // then set the implicit 2^128 bit (RFC 8439 §2.5.1).
+    fn block(&mut self, b: &[u8; 16], len: usize) {
+        // Load the valid message bytes into five 26-bit limbs (little-endian).
         let mut v = [0u32; 5];
-        for (i, byte) in b.iter().enumerate() {
+        for i in 0..len {
             for bit in 0..8 {
-                if (byte >> bit) & 1 != 0 {
+                if (b[i] >> bit) & 1 != 0 {
                     let pos = i * 8 + bit;
                     v[pos / 26] |= 1 << (pos % 26);
                 }
             }
         }
-        v[4] |= 1 << 24; // the 2^128 term
+        v[(8 * len) / 26] |= 1 << ((8 * len) % 26); // the implicit 2^(8·len) term
         self.mulmod(v);
-    }
-
-    /// TEMP debug accessor.
-    #[allow(dead_code)]
-    pub fn debug_state(&self) -> ([u32; 5], [u32; 5], [u32; 5]) {
-        (self.h, self.r, self.s_limbs)
-    }
-
-    /// TEMP debug accessor: process the buffered partial block and return h.
-    #[allow(dead_code)]
-    pub fn debug_finalize_h(&mut self) -> [u32; 5] {
-        if self.buflen > 0 {
-            let mut b = [0u8; 16];
-            b[..self.buflen].copy_from_slice(&self.buf[..self.buflen]);
-            b[self.buflen] = 1;
-            self.block(&b);
-        }
-        self.h
     }
 
     /// Compute `h = (h + v) * r  mod (2^130 - 5)` using 26-bit limbs, folding
@@ -292,7 +272,9 @@ impl Poly1305 {
     /// Final conditional subtraction of p = 2^130 - 5 while `h >= p`.
     /// `h` is assumed to be in normalized form (every limb < 2^26).
     fn reduce(&mut self) {
-        let p = [0x3ff_ffffu32, 0x3ff_ffff, 0x3ff_ffff, 0x3ff_ffff, 3u32];
+        // p = 2^130 - 5 in 26-bit limbs:
+        //   limb0 = 2^26 - 5 = 0x3fffffb, limbs 1..4 = 2^26 - 1 = 0x3ffffff.
+        let p = [0x3ff_fffb, 0x3ff_ffff, 0x3ff_ffff, 0x3ff_ffff, 0x3ff_ffff];
         loop {
             // Is h >= p? Compare limb by limb from the top.
             let mut ge = true;
@@ -331,7 +313,7 @@ impl Poly1305 {
             let mut b = [0u8; 16];
             b[..self.buflen].copy_from_slice(&self.buf[..self.buflen]);
             b[self.buflen] = 1; // 2^(8*buflen) term
-            self.block(&b);
+            self.block(&b, self.buflen);
         }
         // h mod 2^128: limbs 0..3 (bits 0..103) plus limb 4's low 24 bits (104..127).
         let lo = (self.h[0] as u128)
@@ -414,13 +396,6 @@ fn finish_tag(pkey: &[u8; 32], aad: &[u8], ct: &[u8]) -> [u8; 16] {
 mod tests {
     use super::*;
 
-    fn key_zero() -> [u8; 32] {
-        [0u8; 32]
-    }
-    fn nonce_zero() -> [u8; 12] {
-        [0u8; 12]
-    }
-
     #[test]
     fn chacha20_block_rfc8439() {
         // RFC 8439 §2.3.2 (key 00..1f, nonce 00:00:00:09:.., counter 1).
@@ -446,21 +421,6 @@ mod tests {
             &mut key,
         );
         let msg = b"Cryptographic Forum Research Group";
-        let h1;
-        let h2;
-        let h3;
-        let tag2;
-        {
-            let mut poly = Poly1305::new(&key);
-            poly.update(&msg[..16]);
-            h1 = poly.debug_state().0;
-            poly.update(&msg[16..32]);
-            h2 = poly.debug_state().0;
-            poly.update(&msg[32..]);
-            h3 = poly.debug_finalize_h();
-            tag2 = poly.finalize();
-        }
-        panic!("DBG h1={:?} h2={:?} h3={:?} tag={:?}", h1, h2, h3, tag2);
         let tag = {
             let mut poly = Poly1305::new(&key);
             poly.update(msg);

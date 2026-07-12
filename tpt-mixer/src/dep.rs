@@ -1,4 +1,4 @@
-//! Distributed Electric Propulsion (DEP) fault-tolerant mixer (`spec.txt` §9.3,
+//! Distributed Electric Propulsion (DEP) fault-tolerant mixer (`spec.txt` §9.1,
 //! Phase 3).
 //!
 //! Allocates a body-frame wrench (collective thrust, roll/pitch/yaw moments) to

@@ -409,6 +409,125 @@ impl Message for MissionItemInt {
     }
 }
 
+// ---------------------------------------------------------------------------
+// Authenticated / encrypted MAVLink framing (`spec.txt` §19.1).
+//
+// The plain [`Frame`] serialize/parse above is unauthenticated. For links that
+// need confidentiality + integrity (e.g. command/telemetry over untrusted RF),
+// [`serialize_encrypted`] wraps the payload in ChaCha20-Poly1305 (RFC 8439),
+// reusing the `tpt-protocols` `chacha` implementation — the same primitive
+// already wired into TPT-Link. The `INCOMPAT_FLAG_ENCRYPTED` incompat-flag bit
+// marks such frames so a receiver calls [`parse_encrypted`].
+// ---------------------------------------------------------------------------
+
+/// Incompat flag bit signalling a ChaCha20-Poly1305-encrypted payload.
+pub const INCOMPAT_FLAG_ENCRYPTED: u8 = 0x02;
+
+/// AEAD tag length (bytes) appended after the CRC in the encrypted layout.
+pub const TAG_LEN: usize = 16;
+
+/// Serialize `frame` into `out` with its payload encrypted via
+/// ChaCha20-Poly1305. Returns the total length written, or `None` if `out` is
+/// too small. Wire layout:
+/// `[header 10][ciphertext payload_len][CRC-16][AEAD tag 16]`
+///
+/// `crc_extra` is the per-message seed byte (from the dialect definition) used
+/// for the CRC-16, matching the plain framing.
+pub fn serialize_encrypted(
+    frame: &Frame,
+    key: &[u8; 32],
+    nonce: &[u8; 12],
+    crc_extra: u8,
+    out: &mut [u8],
+) -> Option<usize> {
+    let n = frame.payload_len;
+    let total = HEADER_LEN + n + 2 + TAG_LEN;
+    if out.len() < total {
+        return None;
+    }
+    // Header with the encrypted flag set.
+    out[0] = MAVLINK2_MAGIC;
+    out[1] = n as u8;
+    out[2] = frame.incompat_flags | INCOMPAT_FLAG_ENCRYPTED;
+    out[3] = frame.compat_flags;
+    out[4] = frame.seq;
+    out[5] = frame.sysid;
+    out[6] = frame.compid;
+    out[7] = (frame.msgid & 0xFF) as u8;
+    out[8] = ((frame.msgid >> 8) & 0xFF) as u8;
+    out[9] = ((frame.msgid >> 16) & 0xFF) as u8;
+
+    // Encrypt the payload in place; the 10-byte header is authenticated as AAD
+    // so a tampered flag/seq/id is rejected by the AEAD tag.
+    let mut ct = [0u8; MAX_PAYLOAD];
+    ct[..n].copy_from_slice(&frame.payload[..n]);
+    let aad = [
+        out[0], out[1], out[2], out[3], out[4], out[5], out[6], out[7], out[8], out[9],
+    ];
+    let tag = crate::chacha::aead_encrypt(key, nonce, &aad, &mut ct[..n]);
+    out[HEADER_LEN..HEADER_LEN + n].copy_from_slice(&ct[..n]);
+
+    // CRC-16 over header + ciphertext (so a corrupted ciphertext fails CRC
+    // before AEAD, and a tampered header fails AEAD via the AAD).
+    let crc = crc::mavlink_v2(&out[..HEADER_LEN + n], crc_extra);
+    out[HEADER_LEN + n] = (crc & 0xFF) as u8;
+    out[HEADER_LEN + n + 1] = ((crc >> 8) & 0xFF) as u8;
+    out[HEADER_LEN + n + 2..total].copy_from_slice(&tag);
+    Some(total)
+}
+
+/// Parse and authenticate an encrypted MAVLink frame produced by
+/// [`serialize_encrypted`]. On success returns the decrypted [`Frame`] (with the
+/// `INCOMPAT_FLAG_ENCRYPTED` bit cleared). Returns `None` on any
+/// length / flag / CRC / AEAD failure.
+pub fn parse_encrypted(
+    buf: &mut [u8],
+    key: &[u8; 32],
+    nonce: &[u8; 12],
+    crc_extra: u8,
+) -> Option<Frame> {
+    if buf.len() < HEADER_LEN {
+        return None;
+    }
+    if buf[0] != MAVLINK2_MAGIC {
+        return None;
+    }
+    let incompat = buf[2];
+    if incompat & INCOMPAT_FLAG_ENCRYPTED == 0 {
+        return None;
+    }
+    let n = buf[1] as usize;
+    let total = HEADER_LEN + n + 2 + TAG_LEN;
+    if buf.len() < total {
+        return None;
+    }
+    // CRC-16 over header + ciphertext.
+    let crc = crc::mavlink_v2(&buf[..HEADER_LEN + n], crc_extra);
+    let got = u16::from_le_bytes([buf[HEADER_LEN + n], buf[HEADER_LEN + n + 1]]);
+    if got != crc {
+        return None;
+    }
+    // AEAD verification + decryption (in place).
+    let mut pt = [0u8; MAX_PAYLOAD];
+    pt[..n].copy_from_slice(&buf[HEADER_LEN..HEADER_LEN + n]);
+    let mut tag = [0u8; TAG_LEN];
+    tag.copy_from_slice(&buf[HEADER_LEN + n + 2..total]);
+    let aad = [
+        buf[0], buf[1], buf[2], buf[3], buf[4], buf[5], buf[6], buf[7], buf[8], buf[9],
+    ];
+    if !crate::chacha::aead_decrypt(key, nonce, &aad, &mut pt[..n], &tag) {
+        return None;
+    }
+    let mut frame = Frame::new(buf[5], buf[6], buf[4], msgid_from(buf), &pt[..n]);
+    frame.incompat_flags = incompat & !INCOMPAT_FLAG_ENCRYPTED;
+    Some(frame)
+}
+
+/// Reassemble a 24-bit message id from the header bytes.
+fn msgid_from(buf: &[u8]) -> u32 {
+    (buf[7] as u32) | ((buf[8] as u32) << 8) | ((buf[9] as u32) << 16)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -488,5 +607,70 @@ mod tests {
         let (parsed, _) = Frame::parse(&buf[..n], g.crc_extra()).unwrap();
         let d = GlobalPositionInt::unpack(&parsed.payload[..parsed.payload_len]).unwrap();
         assert_eq!(d, g);
+    }
+
+    #[test]
+    fn encrypted_round_trip() {
+        let hb = Heartbeat {
+            mav_type: enums::MAV_TYPE_QUADROTOR,
+            autopilot: enums::MAV_AUTOPILOT_TPT,
+            base_mode: enums::MAV_MODE_FLAG_SAFETY_ARMED,
+            custom_mode: 1,
+            system_status: enums::MAV_STATE_ACTIVE,
+        };
+        let frame = frame_from_message(1, 1, 7, &hb);
+        let key = [3u8; 32];
+        let nonce = [9u8; 12];
+        let mut buf = [0u8; 128];
+        let _n = serialize_encrypted(&frame, &key, &nonce, hb.crc_extra(), &mut buf).unwrap();
+        // The encrypted flag must be set on the wire.
+        assert!(buf[2] & INCOMPAT_FLAG_ENCRYPTED != 0);
+        let mut buf2 = buf;
+        let decrypted = parse_encrypted(&mut buf2, &key, &nonce, hb.crc_extra()).unwrap();
+        assert_eq!(decrypted.msgid, 0);
+        assert_eq!(decrypted.seq, 7);
+        assert_eq!(decrypted.incompat_flags & INCOMPAT_FLAG_ENCRYPTED, 0);
+        let d = Heartbeat::unpack(&decrypted.payload[..decrypted.payload_len]).unwrap();
+        assert_eq!(d, hb);
+    }
+
+    #[test]
+    fn encrypted_rejects_wrong_key() {
+        let hb = Heartbeat {
+            mav_type: enums::MAV_TYPE_QUADROTOR,
+            autopilot: enums::MAV_AUTOPILOT_TPT,
+            base_mode: 0,
+            custom_mode: 0,
+            system_status: enums::MAV_STATE_ACTIVE,
+        };
+        let frame = frame_from_message(1, 1, 0, &hb);
+        let key = [3u8; 32];
+        let nonce = [9u8; 12];
+        let mut buf = [0u8; 128];
+        let _n = serialize_encrypted(&frame, &key, &nonce, hb.crc_extra(), &mut buf).unwrap();
+        let mut buf2 = buf;
+        // A wrong key must fail AEAD verification.
+        assert!(parse_encrypted(&mut buf2, &[0u8; 32], &nonce, hb.crc_extra()).is_none());
+    }
+
+    #[test]
+    fn encrypted_rejects_tampered_header() {
+        let hb = Heartbeat {
+            mav_type: enums::MAV_TYPE_QUADROTOR,
+            autopilot: enums::MAV_AUTOPILOT_TPT,
+            base_mode: 0,
+            custom_mode: 0,
+            system_status: enums::MAV_STATE_ACTIVE,
+        };
+        let frame = frame_from_message(2, 1, 0, &hb);
+        let key = [3u8; 32];
+        let nonce = [9u8; 12];
+        let mut buf = [0u8; 128];
+        let _n = serialize_encrypted(&frame, &key, &nonce, hb.crc_extra(), &mut buf).unwrap();
+        // Flip the sysid in the header; AEAD AAD covers the header, so this
+        // must be rejected.
+        let mut buf2 = buf;
+        buf2[5] ^= 0xFF;
+        assert!(parse_encrypted(&mut buf2, &key, &nonce, hb.crc_extra()).is_none());
     }
 }

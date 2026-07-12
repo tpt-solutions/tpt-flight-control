@@ -146,7 +146,13 @@ pub fn serialize_encrypted(
     out[7..9].copy_from_slice(&(payload.len() as u16).to_le_bytes());
     // Encrypt payload in place into the output buffer.
     out[HEADER_LEN..HEADER_LEN + payload.len()].copy_from_slice(payload);
-    let tag = aead_encrypt(key, nonce, &[out[3]], &mut out[HEADER_LEN..HEADER_LEN + payload.len()]);
+    // Encrypt payload in place into the output buffer. The AAD covers the
+    // fixed header fields (channel/msgid/seq/length); copy them out so the
+    // mutable payload borrow does not alias the AAD borrow.
+    out[HEADER_LEN..HEADER_LEN + payload.len()].copy_from_slice(payload);
+    let mut aad = [0u8; 6];
+    aad.copy_from_slice(&out[3..HEADER_LEN]);
+    let tag = aead_encrypt(key, nonce, &aad, &mut out[HEADER_LEN..HEADER_LEN + payload.len()]);
     out[HEADER_LEN + payload.len()..total].copy_from_slice(&tag);
     Some(total)
 }

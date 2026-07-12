@@ -25,6 +25,14 @@
 use crate::{ControlCommand, MotorMixer};
 use tpt_math::clamp;
 
+/// Scale applied to the moment commands before allocation. The attitude
+/// controller issues large moment demands; dividing them here keeps the
+/// resulting per-motor deflection within the collective-thrust headroom so
+/// the `[0, 1]` clamp never *distorts* the summed thrust (which would make
+/// a low-thrust command sum to >1 and launch the vehicle). The orthonormal
+/// basis still keeps the per-axis torques independent.
+const MOMENT_SCALE: f64 = 7.0;
+
 /// Roll allocation vector (right motors `+y` vs left `-y`).
 pub const ROLL: [f64; 4] = [1.0, -1.0, -1.0, 1.0];
 /// Pitch allocation vector (front motors `+x` vs rear `-x`).
@@ -41,15 +49,13 @@ impl QuadXMixer {
 
     /// Mix without requiring a `MotorMixer` trait object.
     ///
-    /// `m[i] = (thrust + ROLL[i]*roll + PITCH[i]*pitch + YAW[i]*yaw) / 4`.
-    /// The basis is orthonormal, so the resulting body torques about each axis
-    /// are independent of the other commands.
+    /// `m[i] = (thrust + (ROLL[i]*roll + PITCH[i]*pitch + YAW[i]*yaw) / MOMENT_SCALE) / 4`.
     pub fn mix_into(cmd: &ControlCommand, out: &mut [f64]) {
         debug_assert!(out.len() >= Self::MOTOR_COUNT);
         let t = cmd.thrust;
-        let r = cmd.roll;
-        let p = cmd.pitch;
-        let y = cmd.yaw;
+        let r = cmd.roll / MOMENT_SCALE;
+        let p = cmd.pitch / MOMENT_SCALE;
+        let y = cmd.yaw / MOMENT_SCALE;
         out[0] = (t + ROLL[0] * r + PITCH[0] * p + YAW[0] * y) * 0.25; // M1 front-right
         out[1] = (t + ROLL[1] * r + PITCH[1] * p + YAW[1] * y) * 0.25; // M2 rear-left
         out[2] = (t + ROLL[2] * r + PITCH[2] * p + YAW[2] * y) * 0.25; // M3 front-left

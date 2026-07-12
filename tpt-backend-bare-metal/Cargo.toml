@@ -12,6 +12,7 @@ tpt-core.workspace = true
 tpt-mixer.workspace = true
 tpt-sensor-fusion.workspace = true
 tpt-math.workspace = true
+tpt-protocols.workspace = true
 
 [features]
 default = []

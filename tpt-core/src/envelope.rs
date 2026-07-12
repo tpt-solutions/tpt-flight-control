@@ -131,4 +131,54 @@ mod tests {
         state.velocity.z = 100.0;
         assert!(ep.is_violated(&state));
     }
+
+    #[test]
+    fn detects_attitude_violation() {
+        let ep = EnvelopeProtector::new(EnvelopeConfig::default());
+        let mut state = VehicleState::default();
+        // Bank beyond the 30 deg limit.
+        state.attitude.0 = 0.6;
+        assert!(ep.is_violated(&state));
+        // Within limit is not a violation.
+        let mut ok = VehicleState::default();
+        ok.attitude.0 = 0.1;
+        assert!(!ep.is_violated(&ok));
+    }
+
+    #[test]
+    fn detects_body_rate_violation() {
+        let ep = EnvelopeProtector::new(EnvelopeConfig::default());
+        let mut state = VehicleState::default();
+        // Roll rate beyond the 200 deg/s limit (~3.49 rad/s).
+        state.body_rates.x = 4.0;
+        assert!(ep.is_violated(&state));
+        // Pitch rate beyond limit.
+        let mut state2 = VehicleState::default();
+        state2.body_rates.y = -4.0;
+        assert!(ep.is_violated(&state2));
+        // Yaw rate beyond limit.
+        let mut state3 = VehicleState::default();
+        state3.body_rates.z = 3.0;
+        assert!(ep.is_violated(&state3));
+    }
+
+    #[test]
+    fn detects_vne_violation() {
+        let ep = EnvelopeProtector::new(EnvelopeConfig::default());
+        let mut state = VehicleState::default();
+        // Horizontal airspeed beyond never-exceed (20 m/s).
+        state.velocity.x = 25.0;
+        assert!(ep.is_violated(&state));
+        // Pure climb at high rate (separate path from Vne) is still a violation.
+        let mut climb = VehicleState::default();
+        climb.velocity.z = 10.0;
+        assert!(ep.is_violated(&climb));
+    }
+
+    #[test]
+    fn nominal_state_not_violated() {
+        let ep = EnvelopeProtector::new(EnvelopeConfig::default());
+        let state = VehicleState::default();
+        assert!(!ep.is_violated(&state));
+    }
 }

@@ -23,7 +23,7 @@ use tpt_core::{
     AttitudeController, AttitudeSetpoint, EnvelopeConfig, EnvelopeProtector, FlightEvent,
     FlightMode, FlightStateMachine, PositionController, PositionTarget, VehicleState,
 };
-use tpt_math::Vector3;
+use tpt_math::{UnitQuaternion, Vector3};
 use tpt_mixer::{ControlCommand, MotorMixer, QuadXMixer};
 use tpt_sensor_fusion::{
     ComplementaryAhrs, FusionMode, FusionStateMachine, InsEkf, SourceStatus,
@@ -32,9 +32,9 @@ use tpt_sensor_fusion::{
 /// Hover collective thrust command.
 const HOVER_THRUST: f64 = 0.5;
 /// Obstacle look-ahead distance for avoidance (m).
-const LOOKAHEAD: f64 = 3.0;
+const LOOKAHEAD: f64 = 5.0;
 /// Obstacle avoidance aim-point push gain (m).
-const AVOID_GAIN: f64 = 2.5;
+const AVOID_GAIN: f64 = 5.0;
 
 /// A representative GPS-denied / degraded operating scenario.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -182,10 +182,13 @@ impl Scenario {
 
     /// (gps, vio, depth, terrain) source statuses driving the fusion mode.
     pub fn sources(&self) -> (SourceStatus, SourceStatus, SourceStatus, SourceStatus) {
-        let gps = if self.gps().available {
-            SourceStatus::Healthy
-        } else {
-            SourceStatus::Lost
+        // A full 3D/RTK fix is healthy; a 2D (multipath-degraded) fix or
+        // dead-reckoning is degraded and should yield to visual aiding; no fix
+        // is lost.
+        let gps = match self.gps().fix {
+            FixType::Fix3D | FixType::RtkFloat | FixType::RtkFixed => SourceStatus::Healthy,
+            FixType::Fix2D | FixType::DeadReckoning => SourceStatus::Degraded,
+            FixType::NoFix => SourceStatus::Lost,
         };
         let vio = if self.vio().available {
             SourceStatus::Healthy
@@ -431,6 +434,13 @@ impl GpsDeniedSim {
         self.ahrs.update(accel_n, gyro_n, dt);
         let (roll, pitch, yaw) = self.ahrs.attitude();
 
+        // Seed the navigation EKF's attitude from the stabilized AHRS so its
+        // velocity/position mechanization is not corrupted by INS attitude
+        // drift (which would otherwise destabilize the guidance loop closed on
+        // the EKF estimate).
+        self.ekf
+            .set_attitude(UnitQuaternion::from_euler_angles(roll, pitch, yaw));
+
         // Navigation estimate (EKF) mechanization runs every step (IMU rate);
         // aiding corrections and the fusion-mode selection run at the outer
         // 200 Hz rate (§7.2), matching the time-triggered rate groups.
@@ -444,19 +454,20 @@ impl GpsDeniedSim {
 
             if gps != SourceStatus::Lost {
                 let g = self.scenario.gps();
+                // EXPERIMENT: white-noise sensor error (pre-rework).
                 let gpos = self.plant.pos
                     + Vector3::new(
                         noise(self.tick as f64 * 0.2, g.pos_noise),
                         noise(self.tick as f64 * 0.2 + 1.0, g.pos_noise),
                         noise(self.tick as f64 * 0.2 + 2.0, g.pos_noise),
                     );
-                self.ekf.correct_position(gpos, g.pos_noise);
                 let gvel = self.plant.vel
                     + Vector3::new(
                         noise(self.tick as f64 * 0.2 + 3.0, g.vel_noise),
                         noise(self.tick as f64 * 0.2 + 4.0, g.vel_noise),
                         noise(self.tick as f64 * 0.2 + 5.0, g.vel_noise),
                     );
+                self.ekf.correct_position(gpos, g.pos_noise);
                 self.ekf.correct_velocity(gvel, g.vel_noise);
                 self.fusion.note_aiding();
             }
@@ -469,7 +480,7 @@ impl GpsDeniedSim {
                         noise(self.tick as f64 * 0.3 + 2.0, v.pos_noise),
                     );
                 let vyaw = yaw + noise(self.tick as f64 * 0.3 + 3.0, v.yaw_noise);
-                self.ekf.correct_vio(vpos, vyaw, v.pos_noise, v.yaw_noise);
+                self.ekf.correct_vio(vpos, vyaw, v.pos_noise, v.yaw_noise, dt * 5.0);
                 self.fusion.note_aiding();
             }
 
@@ -671,20 +682,5 @@ mod tests {
         assert!((p.x - 5.0).abs() < 3.0, "x={}", p.x);
         assert!((p.y - 5.0).abs() < 3.0, "y={}", p.y);
         assert_eq!(sim.fusion_mode(), FusionMode::GpsAided);
-    }
-
-    #[test]
-    fn dbg_estimate_hover() {
-        let mut sim = GpsDeniedSim::new(Scenario::Nominal);
-        for s in 1..=8 {
-            sim.run(1.0, 0.001);
-            let p = sim.plant().pos;
-            let e = sim.est_position();
-            let v = sim.est_velocity();
-            println!(
-                "t={}s plant=({:.3},{:.3},{:.3}) est=({:.3},{:.3},{:.3}) estv=({:.3},{:.3},{:.3}) sp.thr={:.3} msum={:.3}",
-                s, p.x, p.y, p.z, e.x, e.y, e.z, v.x, v.y, v.z, sim.last_setpoint().thrust, sim.motor_sum()
-            );
-        }
     }
 }

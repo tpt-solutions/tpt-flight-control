@@ -1,4 +1,4 @@
-//! LiDAR / vision SLAM backend (`spec.txt` §8.3, Phase 3).
+//! LiDAR / vision SLAM backend (`spec.txt` §8.1, §8.3, Phase 3).
 //!
 //! Keyframe management plus a planar (2D) Iterative Closest Point (ICP) scan
 //! matcher used for LiDAR odometry / loop closure. The 2D ICP uses a closed-form

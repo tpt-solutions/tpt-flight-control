@@ -1,4 +1,4 @@
-//! Tilt-rotor hover-to-cruise transition logic (`spec.txt` §9.4, Phase 3).
+//! Tilt-rotor hover-to-cruise transition logic (`spec.txt` §9.2, Phase 3).
 //!
 //! Manages the schedule that rotates wing/nacelle-mounted rotors from vertical
 //! lift (hover, tilt = 0°) to forward thrust (cruise, tilt = 90°) as airspeed

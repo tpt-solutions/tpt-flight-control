@@ -3066,6 +3066,7 @@ dependencies = [
  "tpt-core",
  "tpt-math",
  "tpt-mixer",
+ "tpt-protocols",
  "tpt-sensor-fusion",
 ]
 

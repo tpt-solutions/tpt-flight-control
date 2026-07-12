@@ -5,6 +5,11 @@
 //! a placeholder for the commercial certification data package; it contains no
 //! flight-critical logic.
 //!
+//! See [`traceability/`](../traceability) for the requirements traceability
+//! matrix (spec.txt requirement -> implementation -> verifying test), the
+//! first piece of DO-178C life-cycle data (Annex A objectives A-3/A-7) this
+//! project produces.
+//!
 //! > **Status:** scaffolded in Phase -1.
 
 /// Design Assurance Level per DO-178C.

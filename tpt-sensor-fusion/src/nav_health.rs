@@ -69,14 +69,20 @@ impl FusionMode {
     /// Priority: GPS if healthy; else terrain if available and INS drift low;
     /// else visual/depth if available; else coast.
     pub fn select(gps: SourceStatus, vio: SourceStatus, depth: SourceStatus, terrain: SourceStatus, ins_drift_m: f64) -> FusionMode {
-        if gps == SourceStatus::Healthy || gps == SourceStatus::Degraded {
+        // A healthy GPS is the primary source.
+        if gps == SourceStatus::Healthy {
             return FusionMode::GpsAided;
         }
+        // A degraded GPS (e.g. urban-canyon multipath) is unreliable enough
+        // that a healthy visual/depth aiding source is preferred over it.
         if terrain == SourceStatus::Healthy && ins_drift_m < 25.0 {
             return FusionMode::TerrainAided;
         }
         if vio == SourceStatus::Healthy || depth == SourceStatus::Healthy {
             return FusionMode::VisualAided;
+        }
+        if gps == SourceStatus::Degraded {
+            return FusionMode::GpsAided;
         }
         FusionMode::Coast
     }

@@ -10,6 +10,10 @@
 //! corresponding leaf occupied. Raycasting walks the tree to find the nearest
 //! occupied voxel — the core primitive for onboard obstacle avoidance.
 
+use tpt_abstractions::{
+    spatial::SpatialMap,
+    types::{BoundingBox, Landmark, Point3D, Pose6DOF},
+};
 use tpt_math::Vector3;
 
 /// Sentinel for "no child node".
@@ -56,11 +60,12 @@ pub struct SparseVoxelOctree<const CAP: usize> {
 impl<const CAP: usize> SparseVoxelOctree<CAP> {
     /// Create an octree rooted at `origin` with the given half-extent and depth.
     pub const fn new(origin: Vector3<f64>, half_size: f64, max_depth: u8) -> Self {
-        // Safe const-init of the node pool.
+        // Safe const-init of the node pool. Index 0 is reserved as the root
+        // sentinel, so the free-list starts at 1 (see `insert_occupied`).
         let nodes: [Node; CAP] = [Node::empty(); CAP];
         Self {
             nodes,
-            free: 0,
+            free: 1,
             origin,
             half_size,
             max_depth,
@@ -76,6 +81,17 @@ impl<const CAP: usize> SparseVoxelOctree<CAP> {
     /// Whether the node pool is exhausted.
     pub const fn is_full(&self) -> bool {
         self.free >= CAP
+    }
+
+    /// Reset the tree to empty, freeing all nodes. Occupancy and internal
+    /// bookkeeping are cleared; `origin`/`half_size`/`max_depth` are unchanged.
+    /// Index 0 (the root sentinel) is preserved and the free-list restarts at 1.
+    pub fn clear(&mut self) {
+        for n in self.nodes.iter_mut() {
+            *n = Node::empty();
+        }
+        self.free = 1;
+        self.occupied = 0;
     }
 
     /// Side length (m) of a leaf voxel at maximum depth.
@@ -322,5 +338,156 @@ mod tests {
         assert!(t
             .raycast(Vector3::new(0.0, 0.0, 0.0), Vector3::new(1.0, 0.0, 0.0), 20.0)
             .is_none());
+    }
+}
+
+/// A [`SpatialMap`] backed by the [`SparseVoxelOctree`].
+///
+/// This closes the loop noted in the roadmap: the octree obstacle backend is
+/// now wired behind the `tpt-abstractions` `SpatialMap` trait, so the fusion
+/// and obstacle-avoidance layers can hold a `dyn SpatialMap` without knowing
+/// the concrete representation. Keyframes insert their observed landmarks as
+/// occupied voxels; [`SpatialMap::cull_distant_data`] drops points that fall
+/// outside the sliding window around the current position.
+///
+/// * `CAP` bounds the octree node pool (and therefore RAM). When the pool is
+///   exhausted further inserts are silently dropped, matching the bare octree
+///   behavior.
+/// * `PTS` bounds the number of landmark points retained for culling.
+#[derive(Debug, Clone)]
+pub struct OctreeSpatialMap<const CAP: usize, const PTS: usize> {
+    tree: SparseVoxelOctree<CAP>,
+    last_pose: Pose6DOF,
+    /// Landmark points in the local frame, retained for the sliding-window cull.
+    points: [Point3D; PTS],
+    n_points: usize,
+}
+
+impl<const CAP: usize, const PTS: usize> OctreeSpatialMap<CAP, PTS> {
+    /// Create a map rooted at `origin` with the given half-extent (m) and depth.
+    pub fn new(origin: Vector3<f64>, half_size: f64, max_depth: u8) -> Self {
+        Self {
+            tree: SparseVoxelOctree::new(origin, half_size, max_depth),
+            last_pose: Pose6DOF::origin(),
+            points: core::array::from_fn(|_| Point3D::zeros()),
+            n_points: 0,
+        }
+    }
+
+    /// Borrow the underlying octree (e.g. for raycast-based avoidance queries).
+    pub const fn octree(&self) -> &SparseVoxelOctree<CAP> {
+        &self.tree
+    }
+
+    /// Number of landmark points currently retained.
+    pub const fn retained_points(&self) -> usize {
+        self.n_points
+    }
+
+    fn push_point(&mut self, p: Point3D) {
+        if self.n_points < PTS {
+            self.points[self.n_points] = p;
+            self.n_points += 1;
+        }
+    }
+}
+
+impl<const CAP: usize, const PTS: usize> SpatialMap for OctreeSpatialMap<CAP, PTS> {
+    type Error = core::convert::Infallible;
+
+    fn insert_keyframe(
+        &mut self,
+        pose: Pose6DOF,
+        landmarks: &[Landmark],
+    ) -> Result<(), Self::Error> {
+        self.last_pose = pose;
+        for lm in landmarks {
+            // Landmarks are observed in the camera frame; for the onboard
+            // obstacle map we rotate them into the keyframe pose. (A full
+            // odometry transform would also apply the pose translation; the
+            // octree is translation-agnostic here because keyframe poses are
+            // already in the map frame.)
+            let p = pose.orientation * lm.position;
+            self.push_point(p);
+            self.tree.insert_point(p);
+        }
+        Ok(())
+    }
+
+    fn query_obstacles(
+        &self,
+        bbox: &BoundingBox,
+        out: &mut [Point3D],
+    ) -> Result<usize, Self::Error> {
+        Ok(self.tree.query_obstacles(bbox.min, bbox.max, out))
+    }
+
+    fn get_local_pose(&self) -> Result<Pose6DOF, Self::Error> {
+        Ok(self.last_pose)
+    }
+
+    fn cull_distant_data(&mut self, current_pos: Point3D, max_radius: f64) {
+        // Compact the retained points to those within `max_radius` of
+        // `current_pos`, then rebuild the octree from the survivors.
+        let mut kept = 0usize;
+        for i in 0..self.n_points {
+            if (self.points[i] - current_pos).norm() <= max_radius {
+                self.points[kept] = self.points[i];
+                kept += 1;
+            }
+        }
+        self.n_points = kept;
+        self.tree.clear();
+        for i in 0..kept {
+            self.tree.insert_point(self.points[i]);
+        }
+    }
+}
+
+#[cfg(test)]
+mod spatial_map_tests {
+    use super::*;
+    use tpt_abstractions::types::{BoundingBox, Landmark};
+
+    fn map() -> OctreeSpatialMap<1024, 256> {
+        OctreeSpatialMap::new(Vector3::new(0.0, 0.0, 0.0), 10.0, 4)
+    }
+
+    #[test]
+    fn keyframe_inserts_landmarks_as_obstacles() {
+        let mut m = map();
+        let lms = [
+            Landmark { position: Vector3::new(1.0, 1.0, 1.0), descriptor: 1 },
+            Landmark { position: Vector3::new(2.0, 2.0, 2.0), descriptor: 2 },
+        ];
+        m.insert_keyframe(Pose6DOF::origin(), &lms).unwrap();
+        let bbox = BoundingBox {
+            min: Vector3::new(0.0, 0.0, 0.0),
+            max: Vector3::new(5.0, 5.0, 5.0),
+        };
+        let mut out = [Point3D::zeros(); 16];
+        let n = m.query_obstacles(&bbox, &mut out).unwrap();
+        assert_eq!(n, 2);
+        assert_eq!(m.get_local_pose().unwrap(), Pose6DOF::origin());
+        assert_eq!(m.retained_points(), 2);
+    }
+
+    #[test]
+    fn cull_drops_distant_voxels() {
+        let mut m = map();
+        let near = [Landmark { position: Vector3::new(1.0, 0.0, 0.0), descriptor: 1 }];
+        let far = [Landmark { position: Vector3::new(9.0, 9.0, 9.0), descriptor: 2 }];
+        m.insert_keyframe(Pose6DOF::origin(), &near).unwrap();
+        m.insert_keyframe(Pose6DOF::origin(), &far).unwrap();
+        assert_eq!(m.retained_points(), 2);
+        m.cull_distant_data(Vector3::zeros(), 5.0);
+        let bbox = BoundingBox {
+            min: Vector3::new(-10.0, -10.0, -10.0),
+            max: Vector3::new(10.0, 10.0, 10.0),
+        };
+        let mut out = [Point3D::zeros(); 16];
+        let n = m.query_obstacles(&bbox, &mut out).unwrap();
+        assert_eq!(n, 1, "only the near voxel should survive the cull");
+        assert_eq!(m.retained_points(), 1);
     }
 }

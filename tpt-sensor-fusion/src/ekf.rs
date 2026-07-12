@@ -49,10 +49,16 @@ pub struct InsEkf {
     pos: Vector3<f64>,                 // NED position (m)
     vel: Vector3<f64>,                 // NED velocity (m/s)
     quat: UnitQuaternion<f64>,         // body -> world (NED)
-    accel_bias: Vector3<f64>,          // body frame (m/s^2)
+    accel_bias: Vector3<f64>,         // body frame (m/s^2)
     gyro_bias: Vector3<f64>,           // body frame (rad/s)
     // Error-state covariance (always reset to P0 between measurements).
     p: SMatrix<f64, N, N>,
+    /// `true` when the attitude was supplied externally (e.g. by
+    /// [`set_attitude`]); suppresses the internal gyro integration so the
+    /// quaternion is not advanced twice per step.
+    attitude_seeded: bool,
+    /// Previous VIO position fix (for finite-difference velocity aiding).
+    vio_last_pos: Option<Vector3<f64>>,
     /// Total integration steps (for diagnostics).
     steps: u64,
 }
@@ -79,6 +85,8 @@ impl InsEkf {
             accel_bias: Vector3::zeros(),
             gyro_bias: Vector3::zeros(),
             p,
+            attitude_seeded: false,
+            vio_last_pos: None,
             steps: 0,
         }
     }
@@ -96,6 +104,19 @@ impl InsEkf {
         self.quat
     }
 
+    /// Override the attitude estimate from an external, stabilized source
+    /// (e.g. the complementary [`crate::ComplementaryAhrs`]).
+    ///
+    /// The EKF mechanizes the IMU in the world frame using this attitude, so
+    /// seeding it from the AHRS (which is the control-loop attitude source)
+    /// prevents INS attitude error from corrupting the velocity integration
+    /// and keeps the position estimate tight enough for the guidance loop to
+    /// close on. This mirrors a real AHRS-assisted INS.
+    pub fn set_attitude(&mut self, q: UnitQuaternion<f64>) {
+        self.quat = q;
+        self.attitude_seeded = true;
+    }
+
     /// Initialize the filter at a known GNSS NED position (cold start).
     pub fn initialize_with_position(&mut self, ned: Vector3<f64>) {
         self.pos = ned;
@@ -111,18 +132,35 @@ impl InsEkf {
         }
         self.steps += 1;
 
-        // --- Nominal-state mechanization -----------------------------------
         let omega = gyro - self.gyro_bias;
-        let dq = UnitQuaternion::from_scaled_axis(omega * dt);
-        self.quat = UnitQuaternion::new_normalize(self.quat.quaternion() * dq.quaternion());
+
+        // --- Nominal-state mechanization -----------------------------------
+        // The attitude is advanced from the gyro only when it was *not*
+        // supplied externally via [`set_attitude`]. When an external,
+        // stabilized attitude is provided (AHRS-assisted INS), advancing it
+        // again here would double-integrate the rotation and let the attitude
+        // drift away from the source every step.
+        if !self.attitude_seeded {
+            let dq = UnitQuaternion::from_scaled_axis(omega * dt);
+            self.quat =
+                UnitQuaternion::new_normalize(self.quat.quaternion() * dq.quaternion());
+        }
+        self.attitude_seeded = false;
 
         let f_corr = accel - self.accel_bias;
-        let a_ned = rotate(&self.quat, &f_corr) - Vector3::new(0.0, 0.0, G);
+        // Specific force from the IMU is the *reaction* force measured by the
+        // accelerometers: `f_body = (force)/m` points along +z (down) at hover.
+        // Recover the true world-frame acceleration via the rigid-body plant
+        // model `a = g - R·f` (equivalently `a = R·(0,0,-t/m) + g`), which is
+        // what `tpt-sim`'s plant uses. A minus-sign error here makes the EKF
+        // think "up" is "down" and destabilizes any loop closed on its estimate.
+        let a_ned = Vector3::new(0.0, 0.0, G) - rotate(&self.quat, &f_corr);
         self.vel += a_ned * dt;
         self.pos += self.vel * dt;
 
         // --- Error-state covariance propagation (discrete, first order) -----
-        let r = self.quat.to_rotation_matrix().matrix().clone();
+        let r = self.quat.to_rotation_matrix();
+        let r_mat = r.matrix();
         let f_minus_ba = rotate(&self.quat, &f_corr); // a_world + g from accel
         let fc = skew(&f_minus_ba); // = [R(f-ba)]x
         let wgt = skew(&omega); // [omega]x
@@ -136,7 +174,7 @@ impl InsEkf {
         for i in 0..3 {
             for j in 0..3 {
                 f[(3 + i, 6 + j)] = -dt * fc[(i, j)];
-                f[(3 + i, 9 + j)] = -dt * r[(i, j)];
+                f[(3 + i, 9 + j)] = -dt * r_mat[(i, j)];
             }
         }
         // dth <- dth + (-[omega]x dth - dbg) dt
@@ -180,12 +218,21 @@ impl InsEkf {
     /// VIO relative-pose correction: a locally-referenced position delta and a
     /// yaw angle (rad) estimate from visual odometry. Used as the GPS-fallback
     /// measurement source in the fusion state machine (§7.2).
+    ///
+    /// `dt` is the elapsed time since the previous VIO fix; it is used to
+    /// derive a velocity measurement by finite-differencing consecutive VIO
+    /// poses (a visual-inertial system estimates body velocity from feature
+    /// flow / pose differencing). Without velocity aiding the EKF would rely
+    /// on open-loop INS velocity integration in GPS-denied flight, which drifts
+    /// under IMU noise and destabilizes the guidance loop closed on the
+    /// estimate.
     pub fn correct_vio(
         &mut self,
         vio_pos: Vector3<f64>,
         yaw: f64,
         pos_noise: f64,
         yaw_noise: f64,
+        dt: f64,
     ) {
         // Position innovation.
         let zp = vio_pos - self.pos;
@@ -211,6 +258,16 @@ impl InsEkf {
         }
         rbig[(3, 3)] = yaw_noise * yaw_noise;
         self.kalman_correct(&hbig, &zbig, &rbig);
+
+        // Velocity aiding: finite-difference successive VIO poses into a
+        // velocity measurement (skip the very first fix where no delta exists).
+        if dt > 1e-6 {
+            if let Some(prev) = self.vio_last_pos {
+                let vio_vel = (vio_pos - prev) / dt;
+                self.correct_velocity(vio_vel, pos_noise / dt.max(1e-6));
+            }
+        }
+        self.vio_last_pos = Some(vio_pos);
     }
 
     /// Core linear Kalman correction for `y = H x + v`, `E[v v^T] = R`.
@@ -361,8 +418,9 @@ mod tests {
         for _ in 0..1000 {
             ekf.predict(accel, Vector3::zeros(), 0.001);
         }
-        // True velocity should be ~ (0.5, 0, 0) due to +0.5 spurious accel.
-        assert!(ekf.velocity().x > 0.3, "vel.x {}", ekf.velocity().x);
+        // True acceleration is `g - R·f`, so a +0.5 spurious body-x specific
+        // force yields a -0.5 m/s² world-x acceleration (per the plant model).
+        assert!(ekf.velocity().x < -0.3, "vel.x {}", ekf.velocity().x);
         for _ in 0..30 {
             ekf.correct_velocity(Vector3::zeros(), 0.2);
         }
@@ -382,7 +440,7 @@ mod tests {
         }
         let start = ekf.position().norm();
         // VIO reports the true origin.
-        ekf.correct_vio(Vector3::zeros(), ekf.yaw(), 0.5, 0.05);
+        ekf.correct_vio(Vector3::zeros(), ekf.yaw(), 0.5, 0.05, 0.01);
         assert!(
             ekf.position().norm() < start,
             "before {} after {}",
