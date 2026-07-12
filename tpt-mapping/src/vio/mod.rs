@@ -189,3 +189,62 @@ mod tests {
         assert_eq!(pose.delta_pos, Vector3::zeros());
     }
 }
+
+/// Kani proof harnesses (`cargo kani -p tpt-mapping`, §16 / REQ-M-7).
+///
+/// Lives in `vio/mod.rs` (rather than a crate-wide module) so it can reach
+/// the private `Scratch` type and its `len` field directly. The `kani`
+/// crate is injected by the Kani compiler and is not in `Cargo.toml`.
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// A single match (fewer than the required 3) yields the zero pose
+    /// rather than a garbage estimate — the VIO front-end must fail safe.
+    #[kani::proof]
+    fn vio_single_match_is_zero() {
+        let x0: f64 = kani::any();
+        let y0: f64 = kani::any();
+        let x1: f64 = kani::any();
+        let y1: f64 = kani::any();
+        kani::assume(x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite());
+        let m = FeatureMatch { x0, y0, x1, y1 };
+        let pose = VioEstimator::new(500.0).update(&[m], 10.0);
+        assert_eq!(pose.inliers, 0);
+        assert_eq!(pose.delta_pos, Vector3::zeros());
+    }
+
+    /// A non-positive altitude yields the zero pose regardless of match
+    /// count (a non-positive altitude makes the depth-scaling undefined).
+    #[kani::proof]
+    fn vio_nonpositive_altitude_is_zero() {
+        let x0: f64 = kani::any();
+        let y0: f64 = kani::any();
+        let x1: f64 = kani::any();
+        let y1: f64 = kani::any();
+        let alt: f64 = kani::any();
+        kani::assume(x0.is_finite() && y0.is_finite() && x1.is_finite() && y1.is_finite());
+        kani::assume(alt.is_finite() && alt <= 0.0);
+        let m = FeatureMatch { x0, y0, x1, y1 };
+        let pose = VioEstimator::new(500.0).update(&[m, m, m], alt);
+        assert_eq!(pose.inliers, 0);
+        assert_eq!(pose.delta_pos, Vector3::zeros());
+    }
+
+    /// The fixed-capacity scratch buffer used by the median aggregator
+    /// never writes past its 64-element backing array, no matter how many
+    /// values are pushed (feature counts are attacker/sensor controlled and
+    /// unbounded in principle, so this is the actual safety boundary for
+    /// REQ-8.1-1's median aggregation).
+    #[kani::proof]
+    #[kani::unwind(67)]
+    fn scratch_push_bounded_by_capacity() {
+        let mut s = Scratch::new();
+        for _ in 0..66 {
+            let v: f64 = kani::any();
+            kani::assume(v.is_finite());
+            s.push(v);
+            assert!(s.len <= 64);
+        }
+    }
+}

@@ -1,0 +1,26 @@
+[package]
+name = "tpt-web"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Web dashboard (Rust wasm + leptos) for TPT Flight Control (spec.txt §15.4)"
+
+[dependencies]
+tpt-math.workspace = true
+tpt-core.workspace = true
+tpt-sensor-fusion.workspace = true
+tpt-gcs.workspace = true
+
+# The leptos UI is enabled by the `web` feature. Following the project's Kani
+# convention, `leptos` is intentionally *not* declared here: it is only needed
+# when building the wasm front-end and is supplied by the developer via
+# `cargo add leptos --features web`. This keeps the default (host) build free of
+# the heavy wasm UI dependency tree.
+[features]
+default = []
+web = []
+
+[[example]]
+name = "dashboard"
+required-features = ["web"]

@@ -55,9 +55,30 @@ jobs:
           cargo build --target ${{ matrix.target }} -p tpt-math
           cargo build --target ${{ matrix.target }} -p tpt-abstractions
           cargo build --target ${{ matrix.target }} -p tpt-core
+          cargo build --target ${{ matrix.target }} -p tpt-core --features triple-redundancy
           cargo build --target ${{ matrix.target }} -p tpt-sensor-fusion
           cargo build --target ${{ matrix.target }} -p tpt-mixer
           cargo build --target ${{ matrix.target }} -p tpt-backend-bare-metal
+
+  kani:
+    name: Formal verification (Kani)
+    runs-on: ubuntu-latest
+    # New job: proof harnesses were authored against the Kani APIs but have
+    # never been executed by the real `kani-compiler` (Kani only supports
+    # Linux/macOS hosts, so this job is the first real run). Non-blocking
+    # until a maintainer has seen it go green at least once; then remove
+    # `continue-on-error` so it gates merges like the other jobs.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run Kani proofs (tpt-math)
+        uses: model-checking/kani-github-action@v1
+        with:
+          args: "-p tpt-math"
+      - name: Run Kani proofs (tpt-mapping)
+        uses: model-checking/kani-github-action@v1
+        with:
+          args: "-p tpt-mapping"
 
   audit:
     name: Dependency audit & supply-chain

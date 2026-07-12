@@ -152,3 +152,104 @@ mod tests {
         );
     }
 }
+
+/// Kani proof harnesses (`cargo kani -p tpt-math`, §16 / REQ-M-7).
+///
+/// These proofs live inside `kalman.rs` (rather than a top-level
+/// `kani_proofs` module) so they can reach the private `x`/`p` fields and
+/// check the estimator's internal invariants directly, not just its public
+/// `estimate()`/`state()` outputs.
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// The scalar filter's covariance never goes negative across a
+    /// predict/update cycle, and an update never *increases* it, for any
+    /// admissible (non-negative process noise, positive measurement noise)
+    /// parameters. A negative covariance is not just wrong but a warning
+    /// sign of numerical blow-up, so this is a basic sanity envelope for
+    /// every downstream consumer of `estimate()`.
+    #[kani::proof]
+    fn scalar_kalman_covariance_stays_nonnegative() {
+        let x0: f64 = kani::any();
+        let p0: f64 = kani::any();
+        let q: f64 = kani::any();
+        let r: f64 = kani::any();
+        let z: f64 = kani::any();
+        kani::assume(x0.is_finite() && x0.abs() <= 1e6);
+        kani::assume(p0.is_finite() && p0 >= 0.0 && p0 <= 1e6);
+        kani::assume(q.is_finite() && q >= 0.0 && q <= 1e6);
+        kani::assume(r.is_finite() && r > 1e-9 && r <= 1e6);
+        kani::assume(z.is_finite() && z.abs() <= 1e6);
+
+        let mut kf = ScalarKalman::new(x0, p0, q, r);
+        kf.predict();
+        assert!(kf.p >= 0.0);
+        let p_before_update = kf.p;
+        let _ = kf.update(z);
+        assert!(kf.p >= 0.0);
+        assert!(kf.p <= p_before_update + 1e-9);
+    }
+
+    /// A measurement update never overshoots: the corrected estimate is no
+    /// farther from the measurement than the prior estimate was (the
+    /// Kalman gain is always in `[0, 1]` for non-negative `p`/positive `r`).
+    #[kani::proof]
+    fn scalar_kalman_update_is_a_contraction() {
+        let x0: f64 = kani::any();
+        let p0: f64 = kani::any();
+        let r: f64 = kani::any();
+        let z: f64 = kani::any();
+        kani::assume(x0.is_finite() && x0.abs() <= 1e6);
+        kani::assume(p0.is_finite() && p0 >= 0.0 && p0 <= 1e6);
+        kani::assume(r.is_finite() && r > 1e-9 && r <= 1e6);
+        kani::assume(z.is_finite() && z.abs() <= 1e6);
+
+        let mut kf = ScalarKalman::new(x0, p0, 0.0, r);
+        let prior_err = (x0 - z).abs();
+        let x_new = kf.update(z);
+        let post_err = (x_new - z).abs();
+        assert!(post_err <= prior_err + 1e-9);
+    }
+
+    /// Best-effort proof for the generic `S`-state filter at a small,
+    /// concrete dimension (2 states / 1 measurement — the same shape as the
+    /// `nd_position_velocity_filters_noise` test). This exercises real
+    /// `nalgebra` matrix-multiply/inverse code rather than hand-derived
+    /// scalar algebra, so it is more solver-intensive than the scalar
+    /// proofs above; if it does not terminate in CI, narrow the assumed
+    /// ranges further before raising the unwind bound.
+    #[kani::proof]
+    #[kani::unwind(2)]
+    fn kalman_filter_2x1_diagonal_stays_nonnegative() {
+        let p00: f64 = kani::any();
+        let p11: f64 = kani::any();
+        let r00: f64 = kani::any();
+        let dt: f64 = kani::any();
+        let z: f64 = kani::any();
+
+        kani::assume(p00.is_finite() && p00 >= 0.0 && p00 <= 1e3);
+        kani::assume(p11.is_finite() && p11 >= 0.0 && p11 <= 1e3);
+        kani::assume(r00.is_finite() && r00 > 1e-6 && r00 <= 1e3);
+        kani::assume(dt.is_finite() && dt.abs() <= 10.0);
+        kani::assume(z.is_finite() && z.abs() <= 1e3);
+
+        let x0 = SVector::<f64, 2>::zeros();
+        let p0 = SMatrix::<f64, 2, 2>::from_row_slice(&[p00, 0.0, 0.0, p11]);
+        let q = SMatrix::<f64, 2, 2>::zeros();
+        let r = SMatrix::<f64, 1, 1>::from_row_slice(&[r00]);
+        let mut kf = KalmanFilter::<2, 1>::new(x0, p0, q, r);
+
+        let f = SMatrix::<f64, 2, 2>::from_row_slice(&[1.0, dt, 0.0, 1.0]);
+        kf.predict(&f);
+        assert!(kf.p[(0, 0)] >= -1e-6);
+        assert!(kf.p[(1, 1)] >= -1e-6);
+
+        let h = SMatrix::<f64, 1, 2>::from_row_slice(&[1.0, 0.0]);
+        let meas = SVector::<f64, 1>::new(z);
+        if kf.update(&h, &meas).is_some() {
+            assert!(kf.p[(0, 0)] >= -1e-6);
+            assert!(kf.p[(1, 1)] >= -1e-6);
+        }
+    }
+}

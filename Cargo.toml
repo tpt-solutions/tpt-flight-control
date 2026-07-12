@@ -17,6 +17,7 @@ members = [
     "tpt-sim",
     "tpt-gcs",
     "tpt-protocols",
+    "tpt-web",
     "reference-hardware",
     "certification",
     "docs",

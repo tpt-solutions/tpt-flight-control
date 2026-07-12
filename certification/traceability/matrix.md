@@ -52,7 +52,7 @@ implemented, or implemented but known-broken.
 | REQ-M-4 | §15.3 | Provide a symmetric-limit helper for yaw/heading commands. | `tpt_math::angles::limit_symmetric` | `angles.rs::tests::limit_symmetric_clips` | Verified | |
 | REQ-M-5 | §7 | Provide a scalar discrete Kalman filter (predict/update). | `tpt_math::kalman::ScalarKalman` | `kalman.rs::tests::scalar_converges` | Verified | |
 | REQ-M-6 | §7 | Provide a generic `S`-state/`M`-measurement discrete Kalman filter, stack-allocated, no heap. | `tpt_math::kalman::KalmanFilter` | `kalman.rs::tests::nd_position_velocity_filters_noise` | Verified | |
-| REQ-M-7 | §3 principle 6, §16 | Math primitives shall be structured to be formally verifiable (Kani/Creusot). | (crate-wide design constraint: `#![no_std]`, `#![forbid(unsafe_code)]`, no heap) | — | Gap | No Kani/Creusot harness exists yet anywhere in the repo. Matches `todo.md` Phase 4: "Formally verify `tpt-math` using Kani/Creusot" (unchecked). The structural precondition (no `unsafe`, no heap) is met; the proof itself is not started. |
+| REQ-M-7 | §3 principle 6, §16 | Math primitives shall be structured to be formally verifiable (Kani/Creusot). | (crate-wide design constraint: `#![no_std]`, `#![forbid(unsafe_code)]`, no heap) | `#[cfg(kani)] mod kani_proofs` in `tpt-math` (`lib.rs`, `angles.rs`, `kalman.rs`): bounds proofs for `clamp`/`deadzone`, range proofs for `wrap_pi`/`wrap_2pi`/`limit_symmetric`, non-negativity/contraction proofs for `ScalarKalman`, and a concrete-dimension proof for `KalmanFilter`. Plus `tpt-mapping` (`octree/mod.rs`, `tan/mod.rs`, `vio/mod.rs`): octree insert→occupied consistency and bounded raycast distance, TERCOM correction within the search radius, and VIO fail-safe guards (too-few matches / non-positive altitude → zero pose). Wired into a dedicated Kani CI job (`.github/workflows/kani.yml`). | Partial | The structural precondition (no `unsafe`, no heap) is met, harnesses are authored, and the `kani` CI job runs `cargo kani` on both crates. A green proof run still requires the Kani toolchain (Linux/macOS host) and is pending first confirmation. Matches `todo.md` Phase 4: "Formally verify `tpt-math` / `tpt-mapping` using Kani/Creusot" (harnesses + CI landed; full proof run pending). |
 
 ## `tpt-core` — Control Laws, Scheduler, Navigation, Guidance (§4, §6, §7.2 Phase 1)
 
@@ -102,6 +102,7 @@ implemented, or implemented but known-broken.
 | REQ-8.1-2 | §8.1 | The LiDAR SLAM scan matcher shall recover a planar (x, y, yaw) transform aligning a source scan to a target scan via closed-form 2D ICP. | `tpt-mapping::slam::ScanMatcher::icp_2d` | `slam/mod.rs::tests::icp_recovers_known_transform` | Verified | Only 2D ICP is implemented; `todo.md` Phase 3 notes NDT/3D matching is not yet started. |
 | REQ-8.3-1 | §8.3 | The SLAM keyframe graph shall bound memory via a fixed-capacity sliding window, evicting the oldest keyframe once full. | `tpt-mapping::slam::KeyframeGraph` | `slam/mod.rs::tests::keyframe_graph_slides` | Verified | |
 | REQ-8.1-3 | §8.1 | The TERCOM correlator shall recover a north/east position offset by minimum-mean-absolute-difference matching of a measured elevation profile against a DEM. | `tpt-mapping::tan::Tercom::correlate`, `Tercom::correlate_db` | `tan/mod.rs::tests::correlates_true_offset`, `correlate_db_recovers_offset_via_trait` | Verified | Both the closure-driven correlator and the `TerrainDatabase`-trait-driven `correlate_db` are exercised. |
+| REQ-M-8 | §3 principle 6, §16 | The onboard mapping backends (VIO/SLAM/TAN) shall be formally proven to stay within their fixed-capacity, no-heap storage regardless of input (Kani/Creusot). | (crate-wide design constraint: `#![no_std]`, no heap) | `#[cfg(kani)] mod kani_proofs` in `octree/mod.rs` (node-pool capacity + query array-safety), `slam/mod.rs` (`KeyframeGraph`/`Keyframe` capacity), `vio/mod.rs` (fail-safe zero-pose behavior + `Scratch` buffer capacity), `tan/mod.rs` (`DemGrid` sample/patch array-safety). Wired into the same `kani` CI job as `tpt-math` (`.github/workflows/ci.yml`). | Partial | Proof harnesses are authored against the Kani APIs but, like REQ-M-7, have not yet been executed by the real `kani-compiler` (Linux/macOS only); the CI job is `continue-on-error: true` pending a first green run. Matches `todo.md` Phase 4: "Formally verify `tpt-mapping` (VIO/SLAM/TAN bounds) using Kani/Creusot" (still unchecked). |
 
 ---
 
@@ -155,11 +156,11 @@ implemented, or implemented but known-broken.
 | Crate | Verified | Partial | Gap | Not covered |
 |---|---|---|---|---|
 | `tpt-abstractions` | 10 | 1 | 0 | 3 |
-| `tpt-math` | 6 | 0 | 1 | 0 |
+| `tpt-math` | 6 | 1 | 0 | 0 |
 | `tpt-core` | 9 | 0 | 1 | 0 |
 | `tpt-sensor-fusion` | 6 (1 with an integration-level caveat) | 0 | 0 | 0 |
 | `tpt-mixer` | 5 | 0 | 0 | 0 |
-| `tpt-mapping` | 6 | 0 | 0 | 0 |
+| `tpt-mapping` | 6 | 1 | 0 | 0 |
 | `tpt-protocols` | 8 | 0 | 0 | 0 |
 | `tpt-gcs` | 0 | 2 | 0 | 0 |
 | `tpt-sim` | 2 | 0 | 0 | 0 |
@@ -180,6 +181,8 @@ traits (implemented + tested on `Stm32Board`/`SurfaceChannel`). The
 companion-compute offload path (`tpt-protocols::companion`) closes the last
 open Phase 3 mapping-transport item. Remaining `Partial`/`Gap` items: the
 `tpt-gcs` model and the FreeRTOS/Zephyr backends lack dedicated in-crate
-tests; `REQ-M-7`/`REQ-18-1` (Kani/Creusot proofs and flash-to-hardware) remain
-open pending toolchain/silicon; and the `MemoryPool`/`PowerSystem`/partition
-OS traits still await a covering backend pass.
+tests; `REQ-M-7`/`REQ-M-8` (Kani proof harnesses for `tpt-math`/`tpt-mapping`)
+are authored and CI-wired but not yet confirmed by a real `kani-compiler` run
+(Kani requires a Linux/macOS host); `REQ-18-1` (flash-to-hardware) remains
+open pending silicon; and the `MemoryPool`/`PowerSystem`/partition OS traits
+still await a covering backend pass.

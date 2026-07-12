@@ -369,6 +369,73 @@ mod tests {
     }
 }
 
+/// Kani proof harnesses (`cargo kani -p tpt-mapping`, §16 / REQ-M-7).
+///
+/// These live in `octree/mod.rs` (rather than a crate-wide module) so they
+/// can reach the private `free`/`occupied`/`nodes` fields and check the
+/// node-pool bookkeeping directly.
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// The node pool never grows past its fixed capacity `CAP`, no matter
+    /// which (or how many) points are inserted — the "bounded, fixed-
+    /// capacity node storage (no heap)" property of REQ-8.2-1, restated as
+    /// a proof instead of an example-based test.
+    #[kani::proof]
+    #[kani::unwind(5)]
+    fn insert_never_exceeds_capacity() {
+        const CAP: usize = 8;
+        let mut t: SparseVoxelOctree<CAP> =
+            SparseVoxelOctree::new(Vector3::new(0.0, 0.0, 0.0), 10.0, 2);
+
+        for _ in 0..4 {
+            let x: f64 = kani::any();
+            let y: f64 = kani::any();
+            let z: f64 = kani::any();
+            kani::assume(x.is_finite() && y.is_finite() && z.is_finite());
+            kani::assume(x.abs() <= 50.0 && y.abs() <= 50.0 && z.abs() <= 50.0);
+            t.insert_point(Vector3::new(x, y, z));
+            assert!(t.free <= CAP);
+            assert!(t.occupied <= CAP);
+        }
+    }
+
+    /// Point queries never index outside the node pool. Kani's built-in
+    /// array-bounds checks are the proof: any out-of-range index into
+    /// `nodes` during traversal fails verification, so simply driving
+    /// `is_occupied`/`query_obstacles` with symbolic points/boxes on a
+    /// populated (capacity-bounded) tree proves the traversal stays safe.
+    #[kani::proof]
+    #[kani::unwind(10)]
+    fn queries_never_index_out_of_bounds() {
+        const CAP: usize = 8;
+        let mut t: SparseVoxelOctree<CAP> =
+            SparseVoxelOctree::new(Vector3::new(0.0, 0.0, 0.0), 10.0, 2);
+
+        let px: f64 = kani::any();
+        let py: f64 = kani::any();
+        let pz: f64 = kani::any();
+        kani::assume(px.is_finite() && py.is_finite() && pz.is_finite());
+        kani::assume(px.abs() <= 50.0 && py.abs() <= 50.0 && pz.abs() <= 50.0);
+        t.insert_point(Vector3::new(px, py, pz));
+
+        let qx: f64 = kani::any();
+        let qy: f64 = kani::any();
+        let qz: f64 = kani::any();
+        kani::assume(qx.is_finite() && qy.is_finite() && qz.is_finite());
+        kani::assume(qx.abs() <= 50.0 && qy.abs() <= 50.0 && qz.abs() <= 50.0);
+        let _ = t.is_occupied(Vector3::new(qx, qy, qz));
+
+        let mut out = [Vector3::zeros(); 4];
+        let _ = t.query_obstacles(
+            Vector3::new(-10.0, -10.0, -10.0),
+            Vector3::new(10.0, 10.0, 10.0),
+            &mut out,
+        );
+    }
+}
+
 /// A [`SpatialMap`] backed by the [`SparseVoxelOctree`].
 ///
 /// This closes the loop noted in the roadmap: the octree obstacle backend is
@@ -529,5 +596,50 @@ mod spatial_map_tests {
         let n = m.query_obstacles(&bbox, &mut out).unwrap();
         assert_eq!(n, 1, "only the near voxel should survive the cull");
         assert_eq!(m.retained_points(), 1);
+    }
+}
+
+/// Kani proof harnesses (`cargo kani -p tpt-mapping`, §16 / REQ-M-7).
+///
+/// Bounded safety invariants of the octree obstacle backend. The `kani` crate
+/// is injected by the Kani compiler; these do not appear in `Cargo.toml`.
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// Any finite point that is successfully inserted is read back as occupied.
+    /// This is the core read/write consistency guarantee the obstacle-avoidance
+    /// layer relies on: a reported obstacle really is in the map.
+    #[kani::proof]
+    fn octree_insert_then_occupied() {
+        let px: f64 = kani::any();
+        let py: f64 = kani::any();
+        let pz: f64 = kani::any();
+        kani::assume(px.is_finite() && py.is_finite() && pz.is_finite());
+        let p = Vector3::new(px, py, pz);
+
+        let mut tree = SparseVoxelOctree::<256>::new(Vector3::zeros(), 10.0, 4);
+        let ok = tree.insert_point(p);
+        assert!(ok, "a single insert into a large pool must succeed");
+        assert!(tree.is_occupied(p));
+    }
+
+    /// A raycast never reports a hit distance outside `[0, max_dist]`. The
+    /// stepping loop is bounded by `max_dist`, so a `Some` result is always a
+    /// physically-reasonable (non-negative, in-range) obstacle range.
+    #[kani::proof]
+    fn octree_raycast_distance_bounded() {
+        let ro = Vector3::new(kani::any(), kani::any(), kani::any());
+        let rd = Vector3::new(kani::any(), kani::any(), kani::any());
+        let max_dist: f64 = kani::any();
+        kani::assume(ro.x.is_finite() && ro.y.is_finite() && ro.z.is_finite());
+        kani::assume(rd.x.is_finite() && rd.y.is_finite() && rd.z.is_finite());
+        kani::assume(max_dist.is_finite() && max_dist >= 0.0);
+
+        let tree = SparseVoxelOctree::<256>::new(Vector3::zeros(), 10.0, 4);
+        if let Some((_, d)) = tree.raycast(ro, rd, max_dist) {
+            assert!(d >= 0.0);
+            assert!(d <= max_dist + 1e-9);
+        }
     }
 }

@@ -339,6 +339,57 @@ mod tests {
     }
 }
 
+/// Kani proof harnesses (`cargo kani -p tpt-mapping`, §16 / REQ-M-7).
+///
+/// These live in `slam/mod.rs` (rather than a crate-wide module) so they
+/// can reach the private `count`/`len` fields directly.
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// The keyframe graph's sliding window never grows past its fixed
+    /// capacity `K`, regardless of how many keyframes are added — REQ-8.3-1
+    /// ("bound memory via a fixed-capacity sliding window") as a proof
+    /// instead of an example-based test.
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn keyframe_graph_len_bounded_by_capacity() {
+        const K: usize = 3;
+        const P: usize = 2;
+        let mut g: KeyframeGraph<K, P> = KeyframeGraph::new();
+        for _ in 0..5 {
+            let x: f64 = kani::any();
+            kani::assume(x.is_finite() && x.abs() <= 1e3);
+            g.add(Keyframe::<P>::new(x, 0.0, 0.0));
+            assert!(g.len() <= K);
+        }
+    }
+
+    /// A keyframe's point buffer never accepts more than `P` points; once
+    /// full, `push` reports failure instead of overrunning `points`.
+    #[kani::proof]
+    #[kani::unwind(7)]
+    fn keyframe_push_bounded_by_capacity() {
+        const P: usize = 4;
+        let mut kf: Keyframe<P> = Keyframe::new(0.0, 0.0, 0.0);
+        for _ in 0..6 {
+            let x: f64 = kani::any();
+            let y: f64 = kani::any();
+            kani::assume(x.is_finite() && y.is_finite());
+            let before = kf.count;
+            let ok = kf.push(Vector2::new(x, y));
+            assert!(kf.count <= P);
+            if before >= P {
+                assert!(!ok);
+                assert_eq!(kf.count, before);
+            } else {
+                assert!(ok);
+                assert_eq!(kf.count, before + 1);
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod spatial_map_tests {
     use super::*;

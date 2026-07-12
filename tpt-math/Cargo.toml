@@ -8,3 +8,9 @@ description = "Verified-friendly, no_std math library for TPT Flight Control (ve
 
 [dependencies]
 nalgebra.workspace = true
+
+[lints.rust]
+# `cfg(kani)` is supplied by the Kani compiler when running `cargo kani`; it is
+# not a Cargo dependency. Register it so `-D warnings` CI does not flag it as an
+# unexpected cfg.
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }

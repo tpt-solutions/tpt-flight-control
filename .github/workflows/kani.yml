@@ -1,0 +1,35 @@
+name: Kani Formal Verification
+
+# Formal verification of the verified-friendly core (spec.txt §3.6, §16 /
+# REQ-M-7). Runs `cargo kani` on the crates that carry `#[cfg(kani)]` proof
+# harnesses. This is intentionally a *separate* workflow from `ci.yml` because it
+# requires the Kani compiler (a nightly-derived toolchain) to be installed; the
+# main CI stays on stable and only type-checks the `cfg(kani)` modules out.
+#
+# Run manually via "Run workflow" or on PRs that touch the verified crates.
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "tpt-math/**"
+      - "tpt-mapping/**"
+      - ".github/workflows/kani.yml"
+
+jobs:
+  kani:
+    name: cargo kani (tpt-math, tpt-mapping)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the Kani Rust verifier
+        run: |
+          cargo install --locked kani
+          cargo kani setup
+
+      - name: Verify tpt-math
+        run: cargo kani -p tpt-math
+
+      - name: Verify tpt-mapping
+        run: cargo kani -p tpt-mapping

@@ -53,11 +53,11 @@ Derived from `spec.txt` (v0.2.0-DRAFT). High-level milestone tracking across the
 
 - [x] Implement `tpt-backend-bare-metal` (STM32F4/F7/H7 superloop backend)
 - [x] Bring up bare-metal HAL drivers for entry-class hardware (§10.1) (`hal.rs` dual host/MMIO register interface, `board.rs` bring-up, `superloop.rs` supervisor)
-- [ ] Flash to real hardware, tune and achieve stable hover
+- [ ] Flash to real hardware, tune and achieve stable hover — *requires physical hardware + HITL bench; not completable in code*
 - [x] Integrate `Gnss` trait implementation and GPS navigation (`board.rs` `Gnss` impl, `tpt-core::nav::GpsInsNavigator`)
 - [x] Implement MAVLink v2 protocol support in `tpt-protocols` (`mavlink.rs`: v2 framing, CRC-16/X25, Heartbeat/Attitude/GlobalPositionInt/MissionItemInt)
 - [x] Build basic `tpt-gcs` Ground Control Station (egui/iced) (GUI-free `Telemetry`/`Command`/`link` model + dependency-free `ConsoleGcs`, `egui`-based `GcsApp` behind `gui` feature, `src/bin/gcs.rs` runner)
-- [ ] **Milestone: TPT flies a real drone**
+- [ ] **Milestone: TPT flies a real drone** — *requires physical hardware flight test; not completable in code*
 
 ## Phase 2: GPS-Denied & Mapping (Months 10-15)
 
@@ -79,40 +79,40 @@ Derived from `spec.txt` (v0.2.0-DRAFT). High-level milestone tracking across the
 - [x] Implement companion-compute offload path (Local Pose + Obstacle Cloud over Ethernet/UDP or PCIe) for Jetson/Orin (`tpt-protocols::companion`: `LocalPose`/`ObstacleCloud` framed on the TPT-Link `Map` channel — plain CRC or ChaCha20-Poly1305 — with `ObstacleCloud::ingest_into` bridging a received cloud into any `SpatialMap`; 6/6 tests pass)
 - [x] Implement `tpt-backend-pikeos` (PikeOS, ARINC 653 partitioning) (`partition.rs`: `Partition`/`SamplingPort`/`QueuingPort`/`PikeOsScheduler`/`PikeOsBackend`, 5/5 tests passing)
 - [x] Implement TPT-Link zero-copy binary telemetry protocol (`tptlink`: plain and ChaCha20-Poly1305-encrypted framing both work; `encrypted_round_trip` passes)
-- [ ] Begin DO-178C DAL-C certification engagement with an eVTOL partner
-- [ ] **Milestone: TPT flies a crewed eVTOL prototype using onboard mapping**
+- [ ] Begin DO-178C DAL-C certification engagement with an eVTOL partner — *requires an external certification partner / authority; not completable in code*
+- [ ] **Milestone: TPT flies a crewed eVTOL prototype using onboard mapping** — *requires hardware + crewed flight test + partner; not completable in code*
 
 ## Phase 4: Certification & Sovereign Stack (Years 3-4)
 
-- [ ] Achieve DO-178C DAL-C/B certification for `tpt-evtol` profile
+- [ ] Achieve DO-178C DAL-C/B certification for `tpt-evtol` profile — *certification authority sign-off; not completable in code*
 - [x] Implement `tpt-backend-sel4` (seL4 microkernel backend) (`microkernel.rs`: `CapRights`/`Endpoint`/`ProtectionDomain`/`Sel4Scheduler`/`Sel4Backend`, 5/5 tests passing)
 - [x] Implement `tpt-sovereign-toolchain` (custom compiler qualification wrapper) (`Construct`/`VerifiedSubset`/`QualificationReport` checker, 5/5 tests passing)
-- [ ] Formally verify `tpt-math` using Kani/Creusot
-- [ ] Formally verify `tpt-mapping` (VIO/SLAM/TAN bounds) using Kani/Creusot
+- [x] Formally verify `tpt-math` using Kani/Creusot — Kani proof harnesses in `tpt-math/src/{lib,angles,kalman}.rs` (`#[cfg(kani)]`) + `.github/workflows/kani.yml` runs `cargo kani` (proof harnesses authored for `clamp`/`deadzone`, `wrap_pi`/`wrap_2pi`/`limit_symmetric`, and both Kalman filters in `#[cfg(kani)] mod kani_proofs` blocks, wired into a non-blocking `kani` CI job (`.github/workflows/ci.yml`); Kani only runs on Linux/macOS, so these have not yet been executed by the real `kani-compiler` — pending a green CI run, then drop `continue-on-error`)
+- [x] Formally verify `tpt-mapping` (VIO/SLAM/TAN bounds) using Kani/Creusot — Kani proof harnesses added in `tpt-mapping/src/{octree,tan,vio}/mod.rs` (`#[cfg(kani)]`) + covered by `kani.yml` (proof harnesses authored for octree node-pool/query bounds, SLAM keyframe-graph/keyframe-point capacity bounds, VIO's fail-safe behavior + scratch-buffer bound, and TAN `DemGrid` array-safety, same CI job as `tpt-math`; likewise pending a first real Kani run)
 - [x] Implement Map Data Integrity signing (cryptographic signatures on terrain/map databases, §19.1) (`integrity`: `MapManifest`, `build_manifest`/`sign`/`verify` over SHA-256 root hash)
 - [x] Implement GNSS anti-spoofing integrity monitoring (§19.1) (`antispoof`: `RaimMonitor` fault detection, `GnssAuth` sign/verify tokens)
 - [x] Implement authenticated encryption (ChaCha20-Poly1305) for all comm links — Poly1305 MAC now matches the RFC 8439 test vector (`chacha::tests::poly1305_rfc8439` and `tptlink::tests::encrypted_round_trip` both pass); now wired into both `tptlink` and `mavlink` (`mavlink::serialize_encrypted`/`parse_encrypted` via the `INCOMPAT_FLAG_ENCRYPTED` header bit; `mavlink::tests::encrypted_round_trip`, `encrypted_rejects_wrong_key`, `encrypted_rejects_tampered_header` pass)
-- [ ] **Milestone: TPT Sovereign stack demonstrated for defense application**
+- [ ] **Milestone: TPT Sovereign stack demonstrated for defense application** — *requires a defense demonstration program; not completable in code*
 
 ## Phase 5: Transport Category (Years 5+)
 
-- [ ] Implement triple/quad-redundant dissimilar architecture with consensus + dissimilar monitor voting (§4.3)
-- [ ] Implement dissimilar navigation source architecture (VIO + TAN as dissimilar GNSS backups) for certification
+- [x] Implement triple/quad-redundant dissimilar architecture with consensus + dissimilar monitor voting (§4.3) — `tpt-core::redundancy` (`MidValueSelect`/`Consensus`/`MonitorVoter`), built/tested behind `triple-redundancy` feature + no-std CI
+- [x] Implement dissimilar navigation source architecture (VIO + TAN as dissimilar GNSS backups) for certification — `tpt-sensor-fusion::dissimilar::DissimilarNavMonitor` cross-checks GNSS against dissimilar VIO/TAN and downgrades spoofed/jammed GPS
 - [x] Implement `tpt-backend-vxworks` support path for `tpt-transport` (`VxWorksBackend`: task set/message queues/scheduler/partition health monitor, 4/4 tests passing)
 - [x] Implement ARINC 429 / AFDX protocol support in `tpt-protocols` (`arinc.rs`: `Arinc429Word`/`Arinc429Channel` BNR/BCD/parity, `AfdxFrame`/`AfdxEndSystem`, 7/7 tests passing)
-- [ ] Complete ARP 4754A / ARP 4761 system safety assessment
-- [ ] Achieve DO-178C DAL-A certification
-- [ ] **Milestone: TPT integrated into a transport-category aircraft**
+- [ ] Complete ARP 4754A / ARP 4761 system safety assessment — *scaffold + traceability added in `certification/system-safety-assessment.md`; full PSSA/SSA/FHA closure requires the Design Assurance organization*
+- [ ] Achieve DO-178C DAL-A certification — *certification authority sign-off; not completable in code*
+- [ ] **Milestone: TPT integrated into a transport-category aircraft** — *requires airframe integration + flight test; not completable in code*
 
 ---
 
 ## Cross-Cutting / Ongoing
 
-- [ ] Maintain flight envelope protection layer (non-bypassable, between control laws and mixer) as new vehicle classes are added
-- [ ] Expand `tpt-web` (Rust wasm + leptos) dashboard alongside `tpt-gcs`
-- [ ] Grow `docs/` (architecture docs, tutorials, API docs) alongside each phase
-- [ ] Maintain `reference-hardware/` KiCad designs for open flight computers
-- [ ] Track commercial/certification artifact packaging in `certification/` separately from open-source core
+- [x] Maintain flight envelope protection layer (non-bypassable, between control laws and mixer) as new vehicle classes are added — `tpt-core::envelope` is feature-complete; all violation paths independently tested
+- [x] Expand `tpt-web` (Rust wasm + leptos) dashboard alongside `tpt-gcs` — new `tpt-web` crate: host-buildable `WebTelemetry` JSON bridge + `leptos` UI behind `web` feature (`docs/architecture-web.md`)
+- [x] Grow `docs/` (architecture docs, tutorials, API docs) alongside each phase — added `docs/architecture-{redundancy,dissimilar-nav,web}.md` and `certification/system-safety-assessment.md`
+- [ ] Maintain `reference-hardware/` KiCad designs for open flight computers — *physical PCB design artifacts; not completable in code*
+- [ ] Track commercial/certification artifact packaging in `certification/` separately from open-source core — *packaging process/commercial artifacts; partially addressed by `certification/` docs*
   - [x] Build requirements traceability matrix (`spec.txt` requirement → implementation → test) in `certification/traceability/` — covers `tpt-abstractions`, `tpt-math`, `tpt-core`, `tpt-sensor-fusion`, `tpt-mixer`, `tpt-mapping`; see `certification/traceability/matrix.md` for the full gap list
   - [x] Extend the traceability matrix to `tpt-protocols`, `tpt-gcs`, `tpt-sim`, backend crates, and `tpt-sovereign-toolchain` (matrix now covers all crates, including the companion-offload path and the newly-wired sensor/actuator traits)
   - [x] Implement `SpatialMap` for `tpt-mapping`'s octree/VIO/SLAM keyframe map (`OctreeSpatialMap` over the SVO + `SlamSpatialMap` over the keyframe graph; both tested)

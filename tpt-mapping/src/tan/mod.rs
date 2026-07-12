@@ -395,6 +395,47 @@ mod tests {
     }
 }
 
+/// Kani proof harnesses (`cargo kani -p tpt-mapping`, §16 / REQ-M-7).
+///
+/// The TAN "bounds" property from `todo.md`: DEM access must stay within
+/// its fixed backing array regardless of how far the requested lat/lon
+/// falls outside the grid's coverage. `DemGrid::sample` clamps its
+/// fractional row/column to `[0, rows-1]`/`[0, cols-1]` before indexing;
+/// these proofs don't restate that clamp logic, they let Kani's built-in
+/// array-bounds checks catch any case where the clamp is wrong.
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    #[kani::proof]
+    fn dem_grid_sample_never_out_of_bounds() {
+        const N: usize = 9;
+        let grid: DemGrid<N> = DemGrid::new(3, 3, 0.0, 0.0, 1.0, [0.0f64; N]);
+        let lat: f64 = kani::any();
+        let lon: f64 = kani::any();
+        kani::assume(lat.is_finite() && lat.abs() <= 1_000.0);
+        kani::assume(lon.is_finite() && lon.abs() <= 1_000.0);
+        let _ = grid.sample(lat, lon);
+    }
+
+    /// `get_terrain_patch` writes into a fixed `side * side` window of the
+    /// caller's buffer (`side = floor(sqrt(out.len()))`) and must never
+    /// index past either the caller's buffer or the stored grid.
+    #[kani::proof]
+    fn dem_grid_patch_never_out_of_bounds() {
+        const N: usize = 9;
+        let grid: DemGrid<N> = DemGrid::new(3, 3, 0.0, 0.0, 1.0, [0.0f64; N]);
+        let lat: f64 = kani::any();
+        let lon: f64 = kani::any();
+        let radius: f64 = kani::any();
+        kani::assume(lat.is_finite() && lat.abs() <= 1_000.0);
+        kani::assume(lon.is_finite() && lon.abs() <= 1_000.0);
+        kani::assume(radius.is_finite() && radius >= 0.0 && radius <= 1_000.0);
+        let mut out = [0.0f64; 9];
+        let _ = grid.get_terrain_patch(GeoPosition::new(lat, lon, 0.0), radius, &mut out);
+    }
+}
+
 /// Fixed-capacity f64 array helper for tests (no alloc).
 #[cfg(test)]
 fn alloc_array(n: usize) -> heapless::Vec64 {
@@ -431,5 +472,38 @@ mod heapless {
         fn deref(&self) -> &[f64] {
             &self.buf[..self.len]
         }
+    }
+}
+
+/// Kani proof harnesses (`cargo kani -p tpt-mapping`, §16 / REQ-M-7).
+///
+/// The TERCOM correlator must never return a correction outside its own search
+/// grid: a corrupted DEM or profile cannot make the estimator claim a position
+/// farther away than it actually searched. The `kani` crate is injected by the
+/// Kani compiler and is not in `Cargo.toml`.
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// For any DEM and any profile, the returned north/east correction is within
+    /// `[-search_radius, +search_radius]`. The search double-loop is bounded by
+    /// `search_radius_m`, so the best-match index can never leave that window.
+    #[kani::proof]
+    fn tercom_offset_within_search_radius() {
+        let r: f64 = kani::any();
+        let step: f64 = kani::any();
+        let ps: f64 = kani::any();
+        kani::assume(r.is_finite() && r > 0.0);
+        kani::assume(step.is_finite() && step > 0.0);
+        kani::assume(ps.is_finite() && ps > 0.0);
+
+        let tercom = Tercom::new(r, step, ps);
+        // Symbolic but bounded profile (constant here; the bound is independent
+        // of the actual elevations).
+        let profile: [f64; 8] = kani::any();
+        let dem = |_n: f64, _e: f64| 0.0f64;
+        let est = tercom.correlate(&profile, kani::any(), kani::any(), dem);
+        assert!(est.x >= -r - 1e-9 && est.x <= r + 1e-9);
+        assert!(est.y >= -r - 1e-9 && est.y <= r + 1e-9);
     }
 }

@@ -65,7 +65,9 @@ it records current status and the evidence each objective draws on.
 ## Open Items (tracked in `todo.md`)
 
 - Flash bare-metal backend to real hardware and achieve stable hover (REQ-18-1).
-- Formally verify `tpt-math` and `tpt-mapping` with Kani/Creusot (REQ-M-7, §Phase 4).
+- Get a green `kani-compiler` run for the `tpt-math`/`tpt-mapping` proof
+  harnesses authored under REQ-M-7/REQ-M-8 (§Phase 4); the `kani` CI job is
+  `continue-on-error: true` until that first run is confirmed.
 - Implement `VisualSensor`/`LidarSensor`/`RadarAltimeter`/`ControlSurface`
   backend implementers (currently `Gap` in the matrix).
 - Begin DO-178C DAL-C and DAL-A certification engagements with partners.

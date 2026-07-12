@@ -3187,6 +3187,16 @@ name = "tpt-sovereign-toolchain"
 version = "0.2.0"
 
 [[package]]
+name = "tpt-web"
+version = "0.2.0"
+dependencies = [
+ "tpt-core",
+ "tpt-gcs",
+ "tpt-math",
+ "tpt-sensor-fusion",
+]
+
+[[package]]
 name = "tracing"
 version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"

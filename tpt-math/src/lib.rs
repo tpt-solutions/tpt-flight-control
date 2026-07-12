@@ -68,3 +68,58 @@ mod tests {
         assert!((deadzone(0.2, 0.05) - 0.15).abs() < 1e-9);
     }
 }
+
+/// Kani proof harnesses (`cargo kani -p tpt-math`, §16 / REQ-M-7).
+///
+/// The `kani` crate is injected automatically by the Kani compiler when this
+/// crate is built with `cargo kani`; it does not appear in `Cargo.toml`.
+#[cfg(kani)]
+mod kani_proofs {
+    use super::*;
+
+    /// `clamp` always returns a value inside `[lo, hi]` when `lo <= hi`.
+    #[kani::proof]
+    fn clamp_bounded() {
+        let x: f64 = kani::any();
+        let lo: f64 = kani::any();
+        let hi: f64 = kani::any();
+        kani::assume(x.is_finite() && lo.is_finite() && hi.is_finite());
+        kani::assume(lo <= hi);
+        let y = clamp(x, lo, hi);
+        assert!(y >= lo && y <= hi);
+    }
+
+    /// `clamp` is the identity for inputs already inside `[lo, hi]`.
+    #[kani::proof]
+    fn clamp_identity_inside_range() {
+        let x: f64 = kani::any();
+        let lo: f64 = kani::any();
+        let hi: f64 = kani::any();
+        kani::assume(x.is_finite() && lo.is_finite() && hi.is_finite());
+        kani::assume(lo <= x && x <= hi);
+        assert_eq!(clamp(x, lo, hi), x);
+    }
+
+    /// `deadzone` never increases the magnitude of its input, for any
+    /// non-negative band width.
+    #[kani::proof]
+    fn deadzone_shrinks_magnitude() {
+        let x: f64 = kani::any();
+        let width: f64 = kani::any();
+        kani::assume(x.is_finite());
+        kani::assume(width.is_finite() && width >= 0.0);
+        let y = deadzone(x, width);
+        assert!(y.abs() <= x.abs());
+    }
+
+    /// `deadzone` collapses to exactly zero for any input inside the band.
+    #[kani::proof]
+    fn deadzone_zero_inside_band() {
+        let x: f64 = kani::any();
+        let width: f64 = kani::any();
+        kani::assume(x.is_finite());
+        kani::assume(width.is_finite() && width >= 0.0);
+        kani::assume(x.abs() <= width);
+        assert_eq!(deadzone(x, width), 0.0);
+    }
+}

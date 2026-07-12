@@ -13,6 +13,7 @@
 //! - [`pid`] — PID controller with conditional-integration anti-windup.
 //! - [`envelope`] — non-bypassable flight envelope protection.
 //! - [`scheduler`] — 1000/200/50/10/1 Hz time-triggered scheduler.
+//! - [`redundancy`] — triple/quad-redundant dissimilar voting (Phase 5, §4.3).
 //! - [`fsm`] — flight mode state machine.
 //! - [`control`] — cascaded attitude controller built on [`pid`].
 //! - [`state`] — shared vehicle state / setpoint types.
@@ -32,6 +33,9 @@ pub mod pid;
 pub mod scheduler;
 pub mod state;
 
+#[cfg(feature = "triple-redundancy")]
+pub mod redundancy;
+
 pub use control::AttitudeController;
 pub use envelope::{EnvelopeConfig, EnvelopeProtector};
 pub use fsm::{FlightEvent, FlightMode, FlightStateMachine};
@@ -40,3 +44,9 @@ pub use nav::GpsInsNavigator;
 pub use pid::Pid;
 pub use scheduler::TimeTriggeredScheduler;
 pub use state::{AttitudeSetpoint, PositionTarget, VehicleState, VelocitySetpoint};
+
+#[cfg(feature = "triple-redundancy")]
+pub use redundancy::{
+    ChannelReport, Consensus, MidValueSelect, MonitorVoter, RedundantComputer, Votable, VoteStatus,
+    VotedResult, Voter,
+};
