@@ -10,7 +10,8 @@ description = "Actuator mixing and distributed propulsion for TPT Flight Control
 tpt-math.workspace = true
 
 [features]
-default = ["mixer-quad"]
+default = ["mixer-quad", "mixer-dep", "mixer-tilt"]
 mixer-quad = []
 mixer-dep = []
+mixer-tilt = []
 mixer-surface = []

@@ -12,6 +12,7 @@ members = [
     "tpt-backend-zephyr",
     "tpt-backend-pikeos",
     "tpt-backend-sel4",
+    "tpt-backend-vxworks",
     "tpt-sovereign-toolchain",
     "tpt-sim",
     "tpt-gcs",

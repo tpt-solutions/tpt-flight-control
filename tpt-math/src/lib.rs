@@ -17,7 +17,7 @@
 #![no_std]
 #![forbid(unsafe_code)]
 
-pub use nalgebra::{Matrix3, Quaternion, SMatrix, SVector, UnitQuaternion, Vector3};
+pub use nalgebra::{Matrix3, Quaternion, SMatrix, SVector, UnitQuaternion, Vector2, Vector3};
 
 pub mod angles;
 pub mod kalman;

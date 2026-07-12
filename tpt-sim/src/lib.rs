@@ -11,7 +11,9 @@
 #![allow(clippy::too_many_lines)]
 
 pub mod plant;
+pub mod scenarios;
 pub mod sim;
 
 pub use plant::Plant;
+pub use scenarios::{GpsDeniedSim, ObstacleField, Scenario, Sphere};
 pub use sim::Sim;

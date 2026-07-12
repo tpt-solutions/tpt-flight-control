@@ -1,12 +1,10 @@
 [package]
-name = "tpt-mapping"
+name = "tpt-backend-vxworks"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 rust-version.workspace = true
-description = "Onboard mapping, VIO, LiDAR SLAM, and TAN/TERCOM for GPS-denied nav"
+description = "Wind River VxWorks backend (RTP/task model) for tpt-transport (DO-178C DAL-A)"
 
 [dependencies]
-tpt-math.workspace = true
 tpt-abstractions.workspace = true
-libm = "0.2"

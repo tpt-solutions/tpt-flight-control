@@ -9,3 +9,15 @@ description = "Ground Control Station (egui/iced) for TPT Flight Control"
 [dependencies]
 tpt-protocols.workspace = true
 tpt-math.workspace = true
+tpt-core.workspace = true
+tpt-sensor-fusion.workspace = true
+
+# Desktop GUI (egui + eframe). Pulled in only with `--features gui` so the
+# core library and the console runner build and test without a GUI toolchain.
+egui = { version = "0.29", optional = true }
+eframe = { version = "0.29", optional = true }
+
+[features]
+default = []
+# Enables the egui-based desktop GCS window.
+gui = ["dep:egui", "dep:eframe"]

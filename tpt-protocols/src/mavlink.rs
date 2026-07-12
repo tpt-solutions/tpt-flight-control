@@ -364,7 +364,7 @@ impl Message for MissionItemInt {
         38
     }
     fn pack(&self, out: &mut [u8; MAX_PAYLOAD]) -> usize {
-        let b = |o: usize, v: &[u8]| out[o..o + v.len()].copy_from_slice(v);
+        let mut b = |o: usize, v: &[u8]| out[o..o + v.len()].copy_from_slice(v);
         b(0, &[self.target_system]);
         b(1, &[self.target_component]);
         b(2, &self.seq.to_le_bytes());

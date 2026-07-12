@@ -1,15 +1,25 @@
 //! # tpt-mixer
 //!
 //! Actuator mixing and propulsion allocation (`spec.txt` §9). Translates
-//! desired forces and moments into individual actuator commands. The Phase 0
-//! deliverable is the quadcopter **X** mixer; the distributed-electric
-//! propulsion (DEP) fault-tolerant mixer arrives in Phase 3.
+//! desired forces and moments into individual actuator commands.
+//!
+//! - [`quad_x`] — quadcopter **X** mixer (Phase 0).
+//! - [`dep`] — distributed electric propulsion fault-tolerant mixer (Phase 3).
+//! - [`tiltrotor`] — tilt-rotor hover-to-cruise transition logic (Phase 3).
 
 #![no_std]
 #![forbid(unsafe_code)]
 
 #[cfg(feature = "mixer-quad")]
 pub mod quad_x;
+#[cfg(feature = "mixer-dep")]
+pub mod dep;
+#[cfg(feature = "mixer-dep")]
+pub use dep::{DepMixer, Rotor};
+#[cfg(feature = "mixer-tilt")]
+pub mod tiltrotor;
+#[cfg(feature = "mixer-tilt")]
+pub use tiltrotor::{TiltPhase, TiltRotor};
 
 #[cfg(feature = "mixer-quad")]
 pub use quad_x::QuadXMixer;

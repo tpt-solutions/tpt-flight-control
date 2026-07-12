@@ -31,7 +31,7 @@ Derived from `spec.txt` (v0.2.0-DRAFT). High-level milestone tracking across the
 - [x] Add `CODEOWNERS` / domain-expert review requirement for flight-critical and mapping-critical code
 - [x] Set up CI (build + test across `no_std` targets, lint, formatting)
 - [x] Set up SBOM generation and reproducible build pipeline (§19.2)
-- [ ] Establish dependency vendoring/audit process for all Rust crates
+- [x] Establish dependency vendoring/audit process for all Rust crates (`deny.toml`, `scripts/audit.sh`, `scripts/vendor.sh`, CI `audit` job)
 
 ---
 
@@ -51,55 +51,55 @@ Derived from `spec.txt` (v0.2.0-DRAFT). High-level milestone tracking across the
 
 ## Phase 1: First Flight & Basic Drones (Months 4-9)
 
-- [ ] Implement `tpt-backend-bare-metal` (STM32F4/F7/H7 superloop backend)
-- [ ] Bring up bare-metal HAL drivers for entry-class hardware (§10.1)
+- [x] Implement `tpt-backend-bare-metal` (STM32F4/F7/H7 superloop backend)
+- [x] Bring up bare-metal HAL drivers for entry-class hardware (§10.1) (`hal.rs` dual host/MMIO register interface, `board.rs` bring-up, `superloop.rs` supervisor)
 - [ ] Flash to real hardware, tune and achieve stable hover
-- [ ] Integrate `Gnss` trait implementation and GPS navigation
-- [ ] Implement MAVLink v2 protocol support in `tpt-protocols`
-- [ ] Build basic `tpt-gcs` Ground Control Station (egui/iced)
+- [x] Integrate `Gnss` trait implementation and GPS navigation (`board.rs` `Gnss` impl, `tpt-core::nav::GpsInsNavigator`)
+- [x] Implement MAVLink v2 protocol support in `tpt-protocols` (`mavlink.rs`: v2 framing, CRC-16/X25, Heartbeat/Attitude/GlobalPositionInt/MissionItemInt)
+- [x] Build basic `tpt-gcs` Ground Control Station (egui/iced) (GUI-free `Telemetry`/`Command`/`link` model + dependency-free `ConsoleGcs`, `egui`-based `GcsApp` behind `gui` feature, `src/bin/gcs.rs` runner)
 - [ ] **Milestone: TPT flies a real drone**
 
 ## Phase 2: GPS-Denied & Mapping (Months 10-15)
 
-- [ ] Implement Visual-Inertial Odometry (VIO) in `tpt-mapping/vio`
-- [ ] Implement Sparse Voxel Octree (SVO) obstacle map in `tpt-mapping/octree`
-- [ ] Implement EKF in `tpt-sensor-fusion` (replacing/augmenting complementary filter), required for `tpt-uas`+
-- [ ] Integrate VIO pose estimates into EKF for GPS-fallback (Phase 1/2 fusion strategy, §7.2)
-- [ ] Implement GPS-degraded fusion state machine (Coast → Visual/Depth-Aided → Terrain-Aided)
-- [ ] Add `NavHealth` telemetry struct and reporting (§12.2)
-- [ ] Build SITL GPS-denied scenarios in `tpt-sim` (Urban Canyon, Electronic Warfare/jamming, Indoor/Subterranean, Sensor Degradation)
-- [ ] **Milestone: Drone successfully navigates and avoids obstacles with GPS turned off**
+- [x] Implement Visual-Inertial Odometry (VIO) in `tpt-mapping/vio` (`VioEstimator`/`FeatureMatch`/`RelativePose`; basic relative-pose estimator)
+- [x] Implement Sparse Voxel Octree (SVO) obstacle map in `tpt-mapping/octree` (`SparseVoxelOctree`: insert/query/raycast)
+- [x] Implement EKF in `tpt-sensor-fusion` (replacing/augmenting complementary filter), required for `tpt-uas`+ (`InsEkf`: predict/correct_position/correct_velocity)
+- [x] Integrate VIO pose estimates into EKF for GPS-fallback (Phase 1/2 fusion strategy, §7.2) (`InsEkf::correct_vio`)
+- [x] Implement GPS-degraded fusion state machine (Coast → Visual/Depth-Aided → Terrain-Aided) (`nav_health::FusionStateMachine`/`FusionMode`)
+- [x] Add `NavHealth` telemetry struct and reporting (§12.2) (`nav_health::NavHealth`)
+- [x] Build SITL GPS-denied scenarios in `tpt-sim` (`scenarios.rs`: `GpsDeniedSim` + `Scenario::{Nominal, UrbanCanyon, Jamming, Indoor, SensorDegradation, TotalBlackout}`, `ObstacleField` avoidance) — **but 3/8 tests currently fail**: `jammed_gps_navigates_on_vio`, `nominal_reaches_waypoint` (altitude drift), `urban_canyon_uses_visual_aiding` (stuck in `GpsAided` instead of switching to `VisualAided`)
+- [ ] **Milestone: Drone successfully navigates and avoids obstacles with GPS turned off** — obstacle avoidance and indoor/total-blackout cases pass, but GPS-jamming aiding handoff is still broken (see failing tests above)
 
 ## Phase 3: eVTOL & LiDAR SLAM (Year 2)
 
-- [ ] Implement Distributed Electric Propulsion (DEP) mixer with fault-tolerant reallocation (pseudo-inverse / QP) in `tpt-mixer`
-- [ ] Implement tilt-rotor hover-to-cruise transition logic
-- [ ] Implement LiDAR SLAM backend (ICP/NDT scan matching) in `tpt-mapping/slam`
-- [ ] Implement Terrain-Aided Navigation / TERCOM in `tpt-mapping/tan`
+- [x] Implement Distributed Electric Propulsion (DEP) mixer with fault-tolerant reallocation (pseudo-inverse / QP) in `tpt-mixer` (`DepMixer`: fail/restore/allocate, feature-gated `mixer-dep`)
+- [x] Implement tilt-rotor hover-to-cruise transition logic (`TiltRotor`/`TiltPhase`, feature-gated `mixer-tilt`)
+- [x] Implement LiDAR SLAM backend (ICP/NDT scan matching) in `tpt-mapping/slam` (`ScanMatcher::icp_2d` + `KeyframeGraph`; 2D ICP only so far, no NDT/3D yet)
+- [x] Implement Terrain-Aided Navigation / TERCOM in `tpt-mapping/tan` (`Tercom::correlate`)
 - [ ] Implement companion-compute offload path (Local Pose + Obstacle Cloud over Ethernet/UDP or PCIe) for Jetson/Orin
-- [ ] Implement `tpt-backend-pikeos` (PikeOS, ARINC 653 partitioning)
-- [ ] Implement TPT-Link zero-copy binary telemetry protocol
+- [x] Implement `tpt-backend-pikeos` (PikeOS, ARINC 653 partitioning) (`partition.rs`: `Partition`/`SamplingPort`/`QueuingPort`/`PikeOsScheduler`/`PikeOsBackend`, 5/5 tests passing)
+- [x] Implement TPT-Link zero-copy binary telemetry protocol (`tptlink`: plain framing works; ChaCha20-Poly1305-encrypted framing currently **broken** — `encrypted_round_trip` test fails, see Phase 4 crypto note)
 - [ ] Begin DO-178C DAL-C certification engagement with an eVTOL partner
 - [ ] **Milestone: TPT flies a crewed eVTOL prototype using onboard mapping**
 
 ## Phase 4: Certification & Sovereign Stack (Years 3-4)
 
 - [ ] Achieve DO-178C DAL-C/B certification for `tpt-evtol` profile
-- [ ] Implement `tpt-backend-sel4` (seL4 microkernel backend)
-- [ ] Implement `tpt-sovereign-toolchain` (custom compiler qualification wrapper)
+- [x] Implement `tpt-backend-sel4` (seL4 microkernel backend) (`microkernel.rs`: `CapRights`/`Endpoint`/`ProtectionDomain`/`Sel4Scheduler`/`Sel4Backend`, 5/5 tests passing)
+- [x] Implement `tpt-sovereign-toolchain` (custom compiler qualification wrapper) (`Construct`/`VerifiedSubset`/`QualificationReport` checker, 5/5 tests passing)
 - [ ] Formally verify `tpt-math` using Kani/Creusot
 - [ ] Formally verify `tpt-mapping` (VIO/SLAM/TAN bounds) using Kani/Creusot
-- [ ] Implement Map Data Integrity signing (cryptographic signatures on terrain/map databases, §19.1)
-- [ ] Implement GNSS anti-spoofing integrity monitoring (§19.1)
-- [ ] Implement authenticated encryption (ChaCha20-Poly1305) for all comm links
+- [x] Implement Map Data Integrity signing (cryptographic signatures on terrain/map databases, §19.1) (`integrity`: `MapManifest`, `build_manifest`/`sign`/`verify` over SHA-256 root hash)
+- [x] Implement GNSS anti-spoofing integrity monitoring (§19.1) (`antispoof`: `RaimMonitor` fault detection, `GnssAuth` sign/verify tokens)
+- [ ] Implement authenticated encryption (ChaCha20-Poly1305) for all comm links — **crypto bug**: `chacha::tests::poly1305_rfc8439` fails the RFC 8439 test vector (Poly1305 MAC doesn't match spec), which also breaks `tptlink::tests::encrypted_round_trip`; needs a fix before this is trustworthy, and it's still only wired into `tptlink`, not `mavlink`
 - [ ] **Milestone: TPT Sovereign stack demonstrated for defense application**
 
 ## Phase 5: Transport Category (Years 5+)
 
 - [ ] Implement triple/quad-redundant dissimilar architecture with consensus + dissimilar monitor voting (§4.3)
 - [ ] Implement dissimilar navigation source architecture (VIO + TAN as dissimilar GNSS backups) for certification
-- [ ] Implement `tpt-backend-vxworks` support path for `tpt-transport`
-- [ ] Implement ARINC 429 / AFDX protocol support in `tpt-protocols`
+- [x] Implement `tpt-backend-vxworks` support path for `tpt-transport` (`VxWorksBackend`: task set/message queues/scheduler/partition health monitor, 4/4 tests passing)
+- [x] Implement ARINC 429 / AFDX protocol support in `tpt-protocols` (`arinc.rs`: `Arinc429Word`/`Arinc429Channel` BNR/BCD/parity, `AfdxFrame`/`AfdxEndSystem`, 7/7 tests passing)
 - [ ] Complete ARP 4754A / ARP 4761 system safety assessment
 - [ ] Achieve DO-178C DAL-A certification
 - [ ] **Milestone: TPT integrated into a transport-category aircraft**
