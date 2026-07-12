@@ -16,9 +16,9 @@ it records current status and the evidence each objective draws on.
 
 | Objective | Evidence | Status |
 |---|---|---|
-| Plan for software aspects of certification (PSAC) | `certification/` directory, `traceability/`, this SAS | Partial |
+| Plan for software aspects of certification (PSAC) | [`plan-for-software-aspects-of-certification.md`](plan-for-software-aspects-of-certification.md) | Partial |
 | Software development plan (SDP) | `spec.txt` (v0.2.0-DRAFT), `todo.md` milestone tracking | Partial |
-| Software verification plan (SVP) | `cargo test` suites per crate, `traceability/matrix.md` | Partial |
+| Software verification plan (SVP) | [`software-verification-plan.md`](software-verification-plan.md) | Partial |
 | Software configuration management plan (SCMP) | `git`, `.github/workflows/ci.yml`, `deny.toml`, `scripts/` | Partial |
 | Software quality assurance plan (SQAP) | CI gates (`-D warnings`, clippy, audit, SBOM) | Partial |
 
@@ -47,7 +47,7 @@ it records current status and the evidence each objective draws on.
 | Objective | Evidence | Status |
 |---|---|---|
 | Appendices A/B objectives per DAL | this SAS + matrix | Partial |
-| Software configuration index (SCI) | `git` history, SBOM (`sbom/bom.xml`) | Partial |
+| Software configuration index (SCI) | [`software-configuration-index.md`](software-configuration-index.md) | Partial |
 | Software accomplishment summary (this) | this document | Complete |
 
 ## DAL Targets & Gaps
@@ -61,6 +61,16 @@ it records current status and the evidence each objective draws on.
 - **`tpt-transport` (DAL-A):** ARINC 429/AFDX (Phase 5) and VxWorks backend are
   implemented; ARP 4754A/4761 safety assessment and DAL-A certification are
   **Not started**.
+
+## Related certification packages
+
+This SAS covers DO-178C only. Adjacent standards have their own scaffold
+documents in this directory: [environmental-qualification.md](environmental-qualification.md)
+(DO-160), [airworthiness-security.md](airworthiness-security.md)
+(DO-326A/ED-202A), and [hardware-assurance.md](hardware-assurance.md)
+(DO-254, not currently applicable). For what none of these documents —
+individually or together — can substitute for, see
+[path-to-type-certification.md](path-to-type-certification.md).
 
 ## Open Items (tracked in `todo.md`)
 

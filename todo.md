@@ -134,7 +134,7 @@ directions identified in a resilience/innovation review (see conversation
 2026-07-12); designed in detail in the accompanying plan before
 implementation begins.
 
-- [x] Add DO-160 environmental-qualification coverage (§16.3, new): fault-
+- [x] Add DO-160 environmental-qualification coverage (§16.3): fault-
   persistence scrubbing in `tpt-core::redundancy` to distinguish transient
   lightning/HIRF-induced upsets from permanent faults (`FaultMonitor` /
   `FaultClass` / `scrub_channels`), `PowerSystem::brownout_active()`, and SITL
@@ -207,3 +207,42 @@ site, crates.io publish, community chat, etc.) discussed in that review.
   later runs; `tpt-sim/examples/replay.rs` runner; 3/3 tests pass,
   bit-for-bit determinism confirmed to <1e-9 across position/velocity/
   attitude/uncertainty/motor-sum)
+
+---
+
+## Certification Documentation (compliance gap review, 2026-07-12)
+
+Closes documentation-level gaps found in a certification-completeness
+review prompted by "would this be legally usable on a 747-class aircraft"
+— none of these are certification credit by themselves (same caveat as the
+existing `certification/` docs); see
+`certification/path-to-type-certification.md` for what remains
+structurally outside a repository's reach.
+
+- [x] Add DO-326A/ED-202A airworthiness-security scaffold
+  (`certification/airworthiness-security.md`) mapping GNSS anti-spoofing,
+  map-integrity signing, and ChaCha20-Poly1305 auth-encryption to the
+  security process — *not certification credit; formal Security Risk
+  Assessment and independent security verification still required*
+- [x] Cross-reference DO-160 work into the certification package
+  (`certification/environmental-qualification.md`) and add the missing
+  `spec.txt` §16.3 subsection the `FaultMonitor`/`brownout_active`/SITL
+  doc comments already cited — *not certification credit; physical
+  test-lab qualification still required*
+- [x] Add a DO-254/PHAC scaffold (`certification/hardware-assurance.md`)
+  documenting that `reference-hardware/` is currently a placeholder crate
+  with no committed hardware design, so DO-254 has nothing to apply to yet
+  — *status Not Started, by design; revisit once real hardware design work
+  begins*
+- [x] Add standalone PSAC/SVP/SCI scaffold documents
+  (`certification/plan-for-software-aspects-of-certification.md`,
+  `certification/software-verification-plan.md`,
+  `certification/software-configuration-index.md`), replacing the SAS's
+  single-row table entries with real (if partial) documents; SAS evidence
+  links updated accordingly
+- [x] Write `certification/path-to-type-certification.md`: the direct,
+  durable answer to "have we accounted for every legal requirement" —
+  enumerates what this repo provides vs. what only an applicant
+  organization with an authority relationship (ODA/DER), physical test
+  labs, a Design Assurance organization, and a flight test program can
+  provide

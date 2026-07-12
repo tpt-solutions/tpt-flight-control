@@ -123,7 +123,9 @@ hardware, crewed flight tests, certification authorities, or commercial partners
 sensor fusion, GPS-denied navigation, mapping, mixing, backends, protocols, and
 formal-verification harnesses — is implemented and test-covered. The remaining
 gaps are physical flight, crewed/certified demonstrations, and authority sign-off,
-which no codebase can self-close.
+which no codebase can self-close. For the full, itemized list of what a real
+transport-category certification needs beyond this repository, see
+[`certification/path-to-type-certification.md`](certification/path-to-type-certification.md).
 
 ---
 
@@ -165,7 +167,8 @@ todo.md                      Milestone checklist (source of truth for status)
 CONTRIBUTING.md              DCO sign-off + domain-expert review process
 CODEOWNERS                   Flight-/mapping-critical review requirements
 docs/                        Architecture deep-dives (redundancy, dissimilar-nav, web)
-certification/               Traceability matrix, SSA, CI qualification notes
+certification/               Traceability matrix, SSA, CI qualification notes,
+                              path-to-type-certification.md (what's non-code)
 tpt-*/                       Workspace crates (see crate map above)
 reference-hardware/          Open flight-computer KiCad designs
 scripts/                     Audit, vendoring, reproducible-build tooling

@@ -51,3 +51,16 @@
 - [ ] Execute the FTA/CCA to the catastrophic-failure-rate target
       (< 1e-9 per flight hour for DAL-A).
 - [ ] Independent review / approval by the Design Assurance organization.
+
+## Related certification packages
+
+The Common-Cause Analysis row above should be read alongside
+[`airworthiness-security.md`](airworthiness-security.md) (DO-326A/ED-202A)
+— a security-induced common-mode failure (e.g. one spoofed source
+defeating multiple "dissimilar" channels) is a CCA concern, not just a
+security concern, and neither document alone closes it. Environmental
+common-cause events are covered by
+[`environmental-qualification.md`](environmental-qualification.md)
+(DO-160). For everything outside this repository's reach — authority
+sign-off, physical test, flight test — see
+[`path-to-type-certification.md`](path-to-type-certification.md).

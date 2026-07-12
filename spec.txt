@@ -414,13 +414,19 @@ Web Dashboard: tpt-web (Rust wasm + leptos)
 16. Certification & Compliance Pathway
 16.1 Applicable Standards
 DO-178C / DO-330 / DO-332 / DO-333: Software certification and formal methods.
-DO-326A: Airworthiness security (critical for GPS anti-spoofing and map data integrity).
+DO-326A / ED-202A: Airworthiness security (critical for GPS anti-spoofing and map data integrity).
 ARP 4754A / ARP 4761: System safety assessment.
 16.2 GPS-Denied Certification Strategy
 Certifying a GPS-denied navigation system requires proving that the probability of catastrophic failure due to navigation loss is below 10^-9 per flight hour (for DAL-A). TPT achieves this through:
 Dissimilar Redundancy: Using VIO (camera-based) and TAN (radar/terrain-based) as dissimilar backups to GNSS.
 Formal Verification: Mathematically proving the bounds of the EKF and TERCOM correlation algorithms.
 Integrity Monitoring: Continuous innovation monitoring (checking if the map/visual features match the IMU predictions).
+16.3 DO-160 Environmental Qualification
+Distinguishing transient environmental upsets from permanent hardware faults is required before a channel-fault can be trusted for redundancy voting. TPT achieves this through:
+Fault-Persistence Scrubbing: `tpt-core::redundancy::FaultMonitor` classifies each channel's fault state as transient (self-clearing, e.g. lightning indirect-effects or HIRF-induced SEU/glitch) or permanent (persists past a configured scrub window) via `FaultClass` and `scrub_channels`, so a transient upset does not trigger unnecessary channel removal.
+Power-Input Transients: `PowerSystem::brownout_active()` reports bus undervoltage so the vehicle can shed non-essential loads and degrade gracefully instead of resetting.
+SITL Coverage: `tpt-sim::environment` models `EnvScenario::PowerTransient` and `EnvScenario::EmiUpset` so the scrubbing/brownout logic is exercised in simulation.
+This is software fault-injection simulation of DO-160 failure modes, not physical environmental-chamber or lightning-lab test credit — see `certification/environmental-qualification.md`.
 17. Repository Structure
 tpt-flight-control/
 ├── Cargo.toml
