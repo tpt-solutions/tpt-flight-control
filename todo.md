@@ -124,3 +124,86 @@ Derived from `spec.txt` (v0.2.0-DRAFT). High-level milestone tracking across the
   - [x] Add independent test coverage for `EnvelopeProtector::is_violated`'s attitude/rate/Vne violation paths (each path now independently exercised)
   - [x] Write a Software Accomplishment Summary tracking DO-178C Annex A objective status, building on the traceability matrix (`certification/software-accomplishment-summary.md`)
   - [x] Document the clippy/rustfmt/`cargo-audit` CI pipeline as qualified development tools (DO-330-style tool qualification notes) (`certification/ci-qualification.md`)
+
+---
+
+## Resilience & Autonomy Roadmap (planned, 2026-07-12)
+
+Tracks the environmental-hardening, autonomy, and fuel-efficiency
+directions identified in a resilience/innovation review (see conversation
+2026-07-12); designed in detail in the accompanying plan before
+implementation begins.
+
+- [x] Add DO-160 environmental-qualification coverage (§16.3, new): fault-
+  persistence scrubbing in `tpt-core::redundancy` to distinguish transient
+  lightning/HIRF-induced upsets from permanent faults (`FaultMonitor` /
+  `FaultClass` / `scrub_channels`), `PowerSystem::brownout_active()`, and SITL
+  `PowerTransient` / `EmiUpset` scenarios in `tpt-sim::environment` (all pass)
+- [x] Add predictive health / prognostics (`tpt-core::prognostics`): fixed-
+  capacity trend buffers for battery/motor health (`TrendBuffer` / `BatteryHealth`
+  / `MotorHealth`), RUL-style estimates, extended `PowerSystem` / `Motor` trait
+  fields (SoC, cell voltage, temperature, rpm, load, RUL), and a `tptlink`
+  `HealthReport` message on the existing `Channel::Health` (`serialize_health` /
+  `parse_health`) — all unit-tested
+- [x] Autopilot Phase 1 (feature-gated `autopilot` on `tpt-core`): mission/
+  waypoint sequencing (`WaypointSequencer`), wiring the dead-code `EnvelopeProtector::
+  inside_geofence` into a real geofence-breach response (`GeofenceMonitor`:
+  clamp-to-fence / climb-out), and a defined Failsafe (RTL-to-last-good /
+  land-in-place) behavior (`FailsafeManager`) — all unit-tested
+- [x] Autopilot Phase 2: reactive obstacle avoidance wiring `tpt-mapping`'s
+  `SparseVoxelOctree::query_obstacles`/`raycast` into guidance (feature-
+  gated `autopilot-avoidance`, built on `autopilot`) — `ObstacleAvoider::
+  mitigate` / `lookahead_offset` push the aim point around nearby occupied
+  voxels; unit-tested with a real octree
+- [x] Swarm coordination foundation: peer telemetry sharing over existing
+  `tpt-protocols` framing (`swarm::PeerTelemetry` + `serialize_peer`/`parse_peer`
+  on `Channel::Telemetry`) + a relative-position-keeping controller
+  (`swarm::RelativePositionController`, `SwarmNetwork`) in `tpt-core` (feature
+  `swarm`) — unit-tested
+- [x] Formation flight for fuel savings: `FormationController` holding a
+  trailing vehicle in the lead's upwash to cut induced drag (fixed-wing/
+  eVTOL-cruise profiles, `formation::FormationProfile::upwash_slot`), built on
+  the swarm foundation above (feature `formation`) — unit-tested
+- [x] Engine-out glide guidance: `FlightMode::Glide` + `GlideController`
+  flying best-glide-speed/pitch and searching `TerrainDatabase` for the best
+  reachable landing site on total propulsion loss (`glide::best_landing_site`,
+  `FlightEvent::PropulsionLoss` added to `tpt-core::fsm`), feature `glide` —
+  unit-tested with a mock `TerrainDatabase`
+
+---
+
+## Adoption & Innovation (post-review, 2026-07-12)
+
+Tracks the highest-leverage adoption/differentiation items identified in an
+adoption review; see the full list of considered-but-deferred items (docs
+site, crates.io publish, community chat, etc.) discussed in that review.
+
+- [x] Write a root `README.md` (pitch, architecture diagram, honest phase
+  status, 5-command quickstart, links to `spec.txt`/`docs/`/`CONTRIBUTING.md`)
+- [x] Build a 5-minute SITL quickstart entry point in `tpt-sim` so
+  `cargo run -p tpt-sim --example ...` runs a GPS-denied scenario and prints
+  results with no hardware (`tpt-sim/examples/gps_denied_quickstart.rs`:
+  picks a `Scenario` from `argv`, runs `GpsDeniedSim` for 30s of sim time,
+  and prints final position/velocity/fusion-mode/nav-uncertainty with a
+  pass/fail waypoint check — no vehicle, radio, or sensor required)
+- [x] Build a WASM SITL-in-browser demo: compile a `tpt-sim` scenario to
+  `wasm32-unknown-unknown` and feed it into `tpt-web`'s existing
+  `WebTelemetry`/`leptos` dashboard for a live no-install demo
+  (`tpt-web/examples/sitl_demo.rs` + `tpt-web/index.html`: runs
+  `GpsDeniedSim` client-side behind a `leptos` `set_interval` animation
+  loop and renders live telemetry through `tpt_web::ui::Dashboard`; serve
+  with `trunk serve --release --example sitl_demo -p tpt-web --features web`)
+- [ ] Get the Kani CI job (`.github/workflows/kani.yml`) to a real green run
+  under `kani-compiler` and drop `continue-on-error` so verification is
+  enforced, not just advisory — `continue-on-error` has already been
+  dropped and the job split into its own `workflow_dispatch`/path-filtered
+  workflow, but a real `kani-compiler` run (Linux-only, not reproducible
+  from this Windows dev environment) is still outstanding
+- [x] Build a deterministic flight-log replay/diff tool: record a flight log,
+  replay it through the same control-law crate, and diff against the
+  original telemetry (`tpt-sim/src/replay.rs`: `record`/`replay`/`diff`
+  over `GpsDeniedSim`'s `sense`/`apply` steps, plus dependency-free
+  `to_csv`/`from_csv` so a golden log can be saved and diffed against
+  later runs; `tpt-sim/examples/replay.rs` runner; 3/3 tests pass,
+  bit-for-bit determinism confirmed to <1e-9 across position/velocity/
+  attitude/uncertainty/motor-sum)

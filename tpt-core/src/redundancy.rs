@@ -457,6 +457,183 @@ impl<const N: usize, T: Votable> Default for RedundantComputer<N, T> {
     }
 }
 
+/// Classification of a detected fault after scrubbing.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FaultClass {
+    /// No fault observed on this channel.
+    None,
+    /// Transient upset (e.g. lightning indirect-effects / HIRF-induced SEU or
+    /// glitch) that has been observed but has *not* persisted long enough to be
+    /// declared permanent. The channel is still trusted and the upset is
+    /// expected to self-clear (DO-160 §16.3 environmental transients).
+    Transient,
+    /// Persistent fault that has survived the scrub window — treated as a
+    /// permanent hardware failure requiring channel removal / reconfiguration.
+    Permanent,
+}
+
+/// Per-channel fault-persistence monitor (`spec.txt` §16.3, DO-160
+/// environmental qualification).
+///
+/// Distinguishes **transient** environmental upsets (induced by lightning
+/// indirect-effects or HIRF) from **permanent** faults. A transient upset is an
+/// instantaneous deviation that self-clears; a permanent fault persists across
+/// the configured scrub window.
+///
+/// The monitor is allocation-free and `no_std`. On every [`Self::update`] it
+/// scrubs the channel:
+/// - when faulted, a `persist_time` timer accumulates and a `strike` count
+///   increments;
+/// - when healthy, both decay toward zero with `recovery_rate`;
+/// - a fault is classified [`FaultClass::Permanent`] only once `persist_time`
+///   reaches `persist_threshold` **or** the total strike count exceeds
+///   `max_transient_strikes` without clearing. A permanent fault latches until
+///   [`Self::reset`].
+#[derive(Debug, Clone, Copy)]
+pub struct FaultMonitor {
+    /// Accumulated fault time (s) since the last full recovery.
+    persist_time: f64,
+    /// Running strike count (decays when healthy).
+    strikes: u32,
+    /// Time (s) of accumulated fault before a fault is declared permanent.
+    persist_threshold: f64,
+    /// Max strikes before a fault is declared permanent.
+    max_transient_strikes: u32,
+    /// Fractional recovery per second of healthy operation.
+    recovery_rate: f64,
+    /// Latched permanent-fault flag.
+    latched: bool,
+    /// Last reported class.
+    class: FaultClass,
+}
+
+impl FaultMonitor {
+    /// Build with DO-160-style defaults (100 ms scrub window, fast recovery).
+    pub const fn new() -> Self {
+        Self {
+            persist_time: 0.0,
+            strikes: 0,
+            persist_threshold: 0.1,
+            max_transient_strikes: 16,
+            recovery_rate: 2.0,
+            latched: false,
+            class: FaultClass::None,
+        }
+    }
+
+    /// Configure the scrub window / sensitivity.
+    pub const fn with_params(
+        mut self,
+        persist_threshold: f64,
+        max_transient_strikes: u32,
+        recovery_rate: f64,
+    ) -> Self {
+        self.persist_threshold = persist_threshold;
+        self.max_transient_strikes = max_transient_strikes;
+        self.recovery_rate = recovery_rate;
+        self
+    }
+
+    /// Scrub one channel sample. `is_faulted` is the raw per-sample health of
+    /// the channel; `dt` is the elapsed time since the previous sample. Returns
+    /// the current [`FaultClass`].
+    pub fn update(&mut self, is_faulted: bool, dt: f64) -> FaultClass {
+        if self.latched {
+            return FaultClass::Permanent;
+        }
+        if dt <= 0.0 {
+            return self.class;
+        }
+        if is_faulted {
+            self.persist_time += dt;
+            self.strikes = self.strikes.saturating_add(1);
+            if self.persist_time >= self.persist_threshold
+                || self.strikes > self.max_transient_strikes
+            {
+                self.latched = true;
+                self.class = FaultClass::Permanent;
+            } else {
+                self.class = FaultClass::Transient;
+            }
+        } else {
+            self.persist_time = (self.persist_time - dt * self.recovery_rate).max(0.0);
+            if self.strikes > 0 {
+                self.strikes -= 1;
+            }
+            if self.persist_time == 0.0 && self.strikes == 0 {
+                self.class = FaultClass::None;
+            } else {
+                self.class = FaultClass::Transient;
+            }
+        }
+        self.class
+    }
+
+    /// Whether the channel is currently classified as a permanent fault.
+    pub const fn is_permanent(&self) -> bool {
+        self.latched
+    }
+
+    /// Whether the channel has shown a (possibly transient) fault recently.
+    pub const fn is_transient(&self) -> bool {
+        matches!(self.class, FaultClass::Transient)
+    }
+
+    /// Current classification.
+    pub const fn class(&self) -> FaultClass {
+        self.class
+    }
+
+    /// Accumulated (decaying) fault time — useful for telemetry / trending.
+    pub const fn persist_time(&self) -> f64 {
+        self.persist_time
+    }
+
+    /// Total strikes observed since the last [`Self::reset`].
+    pub const fn strikes(&self) -> u32 {
+        self.strikes
+    }
+
+    /// Clear all counters and the latched permanent-fault state (e.g. after a
+    /// scheduled power-cycle / built-in test pass).
+    pub fn reset(&mut self) {
+        self.persist_time = 0.0;
+        self.strikes = 0;
+        self.latched = false;
+        self.class = FaultClass::None;
+    }
+}
+
+impl Default for FaultMonitor {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+/// Scrub a whole redundant channel set, classifying each channel and returning
+/// the indices that should be **dropped** from voting (permanent faults).
+///
+/// `health[i]` is the raw per-sample health of channel `i`. Indices that are
+/// permanent per the supplied [`FaultMonitor`]s are returned in `dropped` (up to
+/// `dropped.len()`), and the count written is returned.
+pub fn scrub_channels(
+    monitors: &mut [FaultMonitor],
+    health: &[bool],
+    dt: f64,
+    dropped: &mut [usize],
+) -> usize {
+    let mut n = 0usize;
+    let len = monitors.len().min(health.len());
+    for i in 0..len {
+        let cls = monitors[i].update(!health[i], dt);
+        if cls == FaultClass::Permanent && n < dropped.len() {
+            dropped[n] = i;
+            n += 1;
+        }
+    }
+    n
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -556,5 +733,78 @@ mod tests {
         let r = MidValueSelect::new().vote(&reports);
         assert_eq!(r.status, VoteStatus::Agreement);
         assert_eq!(r.value, good);
+    }
+
+    #[test]
+    fn single_lightning_spike_is_transient_not_permanent() {
+        let mut m = FaultMonitor::new();
+        // One 1 ms upset is classified Transient; it must NOT latch permanent,
+        // and a few healthy samples scrub it back to None.
+        assert_eq!(m.update(true, 0.001), FaultClass::Transient);
+        assert!(!m.is_permanent());
+        for _ in 0..5 {
+            m.update(false, 0.001);
+        }
+        assert_eq!(m.class(), FaultClass::None);
+        assert!(!m.is_permanent());
+    }
+
+    #[test]
+    fn sustained_fault_latches_permanent() {
+        let mut m = FaultMonitor::new();
+        // A continuous fault accumulates persist_time past the 100 ms scrub
+        // window and eventually latches Permanent (not on the very first sample).
+        let mut saw_permanent = false;
+        for _ in 0..200 {
+            if m.update(true, 0.001) == FaultClass::Permanent {
+                saw_permanent = true;
+            }
+        }
+        assert!(saw_permanent);
+        assert!(m.is_permanent());
+        // Even after going healthy, a permanent fault stays latched.
+        assert_eq!(m.update(false, 0.001), FaultClass::Permanent);
+    }
+
+    #[test]
+    fn repeated_hirf_bursts_stay_transient() {
+        let mut m = FaultMonitor::new().with_params(0.05, 16, 0.5);
+        // 1 ms lightning/HIRF upsets separated by 50 ms healthy gaps. The decay
+        // (0.5/s * 0.05 = 0.025 s per gap) far outpaces the 0.001 s burst, so
+        // each upset is classified Transient and then fully scrubbed back to
+        // None; the channel never reaches the 0.05 s persist threshold and so
+        // never latches Permanent.
+        for _ in 0..20 {
+            assert_eq!(m.update(true, 0.001), FaultClass::Transient);
+            assert_eq!(m.update(false, 0.05), FaultClass::None);
+        }
+        assert!(!m.is_permanent());
+    }
+
+    #[test]
+    fn scrub_channels_drops_permanent_lanes() {
+        let mut monitors = [FaultMonitor::new(); 3];
+        let mut dropped = [0usize; 3];
+        // Channel 1 is permanently faulted; others healthy.
+        let health = [true, false, true];
+        // Run long enough for channel 1 to latch.
+        let mut n = 0;
+        for _ in 0..200 {
+            n = scrub_channels(&mut monitors, &health, 0.001, &mut dropped);
+        }
+        assert_eq!(n, 1);
+        assert_eq!(dropped[0], 1);
+    }
+
+    #[test]
+    fn reset_clears_latched_fault() {
+        let mut m = FaultMonitor::new();
+        for _ in 0..200 {
+            m.update(true, 0.001);
+        }
+        assert!(m.is_permanent());
+        m.reset();
+        assert!(!m.is_permanent());
+        assert_eq!(m.class(), FaultClass::None);
     }
 }

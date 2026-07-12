@@ -13,6 +13,6 @@ path = "src/main.rs"
 [dependencies]
 tpt-math.workspace = true
 tpt-abstractions.workspace = true
-tpt-core.workspace = true
+tpt-core = { workspace = true, features = ["triple-redundancy"] }
 tpt-mixer.workspace = true
 tpt-sensor-fusion.workspace = true

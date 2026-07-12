@@ -95,4 +95,29 @@ pub trait PowerSystem {
     fn available_power_w(&self) -> f64;
     /// Whether the power system is within nominal limits.
     fn is_nominal(&self) -> bool;
+    /// Whether the bus has sagged below the brownout threshold (DO-160 §16.3
+    /// power-input transients / undervoltage). When `true` the vehicle should
+    /// shed non-essential loads and degrade gracefully rather than resetting.
+    fn brownout_active(&self) -> bool;
+
+    // --- Prognostics extension (§16.3, `tpt-core::prognostics`) ---
+    // Defaulted so existing implementors keep compiling; backends override these
+    // when they can measure the quantities.
+
+    /// Battery state of charge in `[0, 1]` (default 0 = unknown).
+    fn state_of_charge(&self) -> f64 {
+        0.0
+    }
+    /// Minimum cell voltage under load (V) (default 0 = unknown).
+    fn min_cell_voltage_v(&self) -> f64 {
+        0.0
+    }
+    /// Pack temperature (°C) (default 0 = unknown).
+    fn pack_temperature_c(&self) -> f64 {
+        0.0
+    }
+    /// Remaining useful life estimate in `[0, 1]` (1 = new, default 1).
+    fn remaining_useful_life(&self) -> f64 {
+        1.0
+    }
 }

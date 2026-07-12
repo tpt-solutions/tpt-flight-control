@@ -13,6 +13,7 @@ pub enum FlightMode {
     PositionHold,
     Land,
     Failsafe,
+    Glide,
 }
 
 /// Events that drive mode transitions.
@@ -26,6 +27,7 @@ pub enum FlightEvent {
     OnGround,
     Fault,
     Recovered,
+    PropulsionLoss,
 }
 
 /// Explicit flight state machine.
@@ -59,6 +61,15 @@ impl FlightStateMachine {
             (FlightMode::Failsafe, FlightEvent::Recovered) => FlightMode::Armed,
             (FlightMode::Armed, FlightEvent::Disarm) => FlightMode::Disarmed,
             (FlightMode::Failsafe, FlightEvent::Disarm) => FlightMode::Disarmed,
+            // Total propulsion loss: enter engine-out glide from any powered
+            // (or landing) mode. Glide itself is terminal for this event.
+            (m, FlightEvent::PropulsionLoss)
+                if m != FlightMode::Disarmed && m != FlightMode::Glide =>
+            {
+                FlightMode::Glide
+            }
+            (FlightMode::Glide, FlightEvent::CommandLand) => FlightMode::Land,
+            (FlightMode::Glide, FlightEvent::OnGround) => FlightMode::Disarmed,
             _ => return None,
         };
         self.mode = next;
@@ -73,6 +84,7 @@ impl FlightStateMachine {
                 | FlightMode::PositionHold
                 | FlightMode::Land
                 | FlightMode::Failsafe
+                | FlightMode::Glide
         )
     }
 }

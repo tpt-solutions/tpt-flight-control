@@ -147,6 +147,7 @@ fn flight_mode_str(m: FlightMode) -> &'static str {
         FlightMode::PositionHold => "PositionHold",
         FlightMode::Land => "Land",
         FlightMode::Failsafe => "Failsafe",
+        FlightMode::Glide => "Glide",
     }
 }
 

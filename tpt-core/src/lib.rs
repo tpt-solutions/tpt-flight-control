@@ -30,11 +30,32 @@ pub mod fsm;
 pub mod guidance;
 pub mod nav;
 pub mod pid;
+pub mod prognostics;
 pub mod scheduler;
 pub mod state;
 
 #[cfg(feature = "triple-redundancy")]
 pub mod redundancy;
+
+/// Autopilot Phase 1 (mission sequencing, geofence response, failsafe).
+#[cfg(feature = "autopilot")]
+pub mod autopilot;
+
+/// Autopilot Phase 2: reactive obstacle avoidance via the mapping octree.
+#[cfg(feature = "autopilot-avoidance")]
+pub mod autopilot_avoidance;
+
+/// Swarm coordination foundation (peer telemetry + relative-position keeping).
+#[cfg(feature = "swarm")]
+pub mod swarm;
+
+/// Formation flight for induced-drag reduction (built on `swarm`).
+#[cfg(feature = "formation")]
+pub mod formation;
+
+/// Engine-out glide guidance (built on `TerrainDatabase`).
+#[cfg(feature = "glide")]
+pub mod glide;
 
 pub use control::AttitudeController;
 pub use envelope::{EnvelopeConfig, EnvelopeProtector};
@@ -45,8 +66,25 @@ pub use pid::Pid;
 pub use scheduler::TimeTriggeredScheduler;
 pub use state::{AttitudeSetpoint, PositionTarget, VehicleState, VelocitySetpoint};
 
+pub use prognostics::{BatteryHealth, MotorHealth, TrendBuffer};
+
 #[cfg(feature = "triple-redundancy")]
 pub use redundancy::{
     ChannelReport, Consensus, MidValueSelect, MonitorVoter, RedundantComputer, Votable, VoteStatus,
     VotedResult, Voter,
 };
+
+#[cfg(feature = "autopilot")]
+pub use autopilot::{FailsafeManager, FailsafeStrategy, GeofenceMonitor, WaypointSequencer};
+
+#[cfg(feature = "autopilot-avoidance")]
+pub use autopilot_avoidance::ObstacleAvoider;
+
+#[cfg(feature = "swarm")]
+pub use swarm::{PeerTelemetry, RelativePositionController};
+
+#[cfg(feature = "formation")]
+pub use formation::FormationController;
+
+#[cfg(feature = "glide")]
+pub use glide::{GlideController, GlideProfile};

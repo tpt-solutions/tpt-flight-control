@@ -10,6 +10,7 @@ description = "Flight control laws, state machine, envelope protection, schedule
 tpt-math.workspace = true
 tpt-abstractions.workspace = true
 tpt-mapping = { workspace = true, optional = true }
+tpt-protocols = { workspace = true, optional = true }
 libm = "0.2"
 
 [features]
@@ -33,3 +34,9 @@ arinc653 = []
 triple-redundancy = []
 # Mark this build as using the formally verified subset (§13, §16)
 tpt-verified-subset = []
+# Resilience / autonomy roadmap (§16.3, 2026-07-12 review)
+autopilot = []
+autopilot-avoidance = ["autopilot", "dep:tpt-mapping"]
+swarm = ["dep:tpt-protocols"]
+formation = ["swarm"]
+glide = []

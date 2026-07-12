@@ -45,6 +45,24 @@ pub enum Scenario {
     TotalBlackout,
 }
 
+/// The exact, deterministic sensor inputs consumed by the control stack on a
+/// single control step. Produced by [`GpsDeniedSim::sense`] and consumed by
+/// [`GpsDeniedSim::apply`]; the flight-log replay tool records these so a run
+/// can be reproduced bit-for-bit (see `crate::replay`).
+#[derive(Debug, Clone)]
+pub struct SenseBatch {
+    /// Noise-corrupted accelerometer reading (body frame, m/s^2).
+    pub accel: Vector3<f64>,
+    /// Noise-corrupted gyroscope reading (body frame, rad/s).
+    pub gyro: Vector3<f64>,
+    /// GPS position/velocity correction, if aiding was applied this step:
+    /// `(gps_pos, gps_vel, pos_noise, vel_noise)`.
+    pub gps: Option<(Vector3<f64>, Vector3<f64>, f64, f64)>,
+    /// VIO pose correction, if aiding was applied this step:
+    /// `(vio_pos, yaw, pos_noise, yaw_noise)`.
+    pub vio: Option<(Vector3<f64>, f64, f64, f64)>,
+}
+
 /// GPS availability / quality for a scenario.
 #[derive(Debug, Clone, Copy)]
 pub struct GpsCondition {
@@ -223,6 +241,20 @@ impl ObstacleField {
         }
     }
 
+    /// Build from a slice of `(center, radius)` spheres (up to 4).
+    pub fn from_spheres(spheres: &[(Vector3<f64>, f64)]) -> Self {
+        let mut field = Self::new();
+        for (c, r) in spheres.iter().take(4) {
+            field.add(*c, *r);
+        }
+        field
+    }
+
+    /// The `(center, radius)` spheres currently in the field.
+    pub fn spheres(&self) -> &[Sphere] {
+        &self.spheres[..self.count]
+    }
+
     /// Add a sphere (up to 4).
     pub fn add(&mut self, center: Vector3<f64>, radius: f64) {
         if self.count < self.spheres.len() {
@@ -366,6 +398,16 @@ impl GpsDeniedSim {
         self.motors.iter().sum()
     }
 
+    /// Current scenario being simulated.
+    pub fn scenario(&self) -> Scenario {
+        self.scenario
+    }
+
+    /// Current mission waypoint.
+    pub fn target(&self) -> PositionTarget {
+        self.target
+    }
+
     /// Current vehicle plant position.
     pub fn plant(&self) -> &Plant {
         &self.plant
@@ -396,6 +438,16 @@ impl GpsDeniedSim {
         self.min_obstacle_dist
     }
 
+    /// The obstacle field as `(center, radius)` pairs, if one is installed.
+    pub fn obstacle_spheres(&self) -> Option<Vec<(Vector3<f64>, f64)>> {
+        self.obstacles.as_ref().map(|o| {
+            o.spheres()
+                .iter()
+                .map(|s| (s.center, s.radius))
+                .collect()
+        })
+    }
+
     /// Run `seconds` of simulation at `dt`.
     pub fn run(&mut self, seconds: f64, dt: f64) {
         let steps = (seconds / dt).round() as u64;
@@ -404,9 +456,29 @@ impl GpsDeniedSim {
         }
     }
 
-    /// Advance one control step.
-    pub fn step(&mut self, dt: f64) {
+    /// Advance the control-loop tick counter by one step. The closed loop is
+    /// driven in discrete time; both [`sense`](Self::sense) and the record /
+    /// replay helpers advance the tick exactly once per step so the noise
+    /// sequence and 200 Hz outer-loop cadence stay aligned.
+    pub fn advance_tick(&mut self) {
         self.tick += 1;
+    }
+
+    /// Advance one control step: sense the (deterministic) world, then apply
+    /// the control stack + plant to those readings.
+    pub fn step(&mut self, dt: f64) {
+        self.advance_tick();
+        let batch = self.sense(dt);
+        self.apply(dt, batch);
+    }
+
+    /// Compute the deterministic sensor batch for the next control step
+    /// *without* advancing the control stack or plant. The batch captures
+    /// exactly the inputs the control laws will consume, so a recording of
+    /// these batches is sufficient to replay a flight bit-for-bit
+    /// (see [`crate::replay`]).
+    pub fn sense(&mut self, dt: f64) -> SenseBatch {
+        let _ = dt;
         let outer_tick = self.tick % 5 == 0; // 200 Hz navigation loop
         let (accel, gyro) = self.plant.imu(&self.motors);
         let imu = self.scenario.imu();
@@ -422,6 +494,63 @@ impl GpsDeniedSim {
                 noise(self.tick as f64 * 0.1 + 4.0, imu.gyro_noise),
                 noise(self.tick as f64 * 0.1 + 5.0, imu.gyro_noise),
             );
+
+        let mut gps = None;
+        let mut vio = None;
+        if outer_tick {
+            let (gps_status, vio_status, _, _) = self.scenario.sources();
+            if gps_status != SourceStatus::Lost {
+                let g = self.scenario.gps();
+                // EXPERIMENT: white-noise sensor error (pre-rework).
+                let gpos = self.plant.pos
+                    + Vector3::new(
+                        noise(self.tick as f64 * 0.2, g.pos_noise),
+                        noise(self.tick as f64 * 0.2 + 1.0, g.pos_noise),
+                        noise(self.tick as f64 * 0.2 + 2.0, g.pos_noise),
+                    );
+                let gvel = self.plant.vel
+                    + Vector3::new(
+                        noise(self.tick as f64 * 0.2 + 3.0, g.vel_noise),
+                        noise(self.tick as f64 * 0.2 + 4.0, g.vel_noise),
+                        noise(self.tick as f64 * 0.2 + 5.0, g.vel_noise),
+                    );
+                gps = Some((gpos, gvel, g.pos_noise, g.vel_noise));
+            }
+            if vio_status != SourceStatus::Lost {
+                let v = self.scenario.vio();
+                let vpos = self.plant.pos
+                    + Vector3::new(
+                        noise(self.tick as f64 * 0.3, v.pos_noise),
+                        noise(self.tick as f64 * 0.3 + 1.0, v.pos_noise),
+                        noise(self.tick as f64 * 0.3 + 2.0, v.pos_noise),
+                    );
+                let vyaw =
+                    self.ahrs.attitude().2 + noise(self.tick as f64 * 0.3 + 3.0, v.yaw_noise);
+                vio = Some((vpos, vyaw, v.pos_noise, v.yaw_noise));
+            }
+        }
+
+        SenseBatch {
+            accel: accel_n,
+            gyro: gyro_n,
+            gps,
+            vio,
+        }
+    }
+
+    /// Advance the control stack + plant using externally-supplied sensor
+    /// readings. This is the deterministic, pure-function core of the closed
+    /// loop: given the same [`SenseBatch`] and the same prior state, it always
+    /// produces the same motor commands and plant evolution as a live
+    /// [`GpsDeniedSim::step`].
+    pub fn apply(&mut self, dt: f64, batch: SenseBatch) {
+        let outer_tick = self.tick % 5 == 0; // 200 Hz navigation loop
+        let SenseBatch {
+            accel: accel_n,
+            gyro: gyro_n,
+            gps,
+            vio,
+        } = batch;
 
         // Attitude estimate (control loop uses this).
         self.ahrs.update(accel_n, gyro_n, dt);
@@ -439,42 +568,20 @@ impl GpsDeniedSim {
         // 200 Hz rate (§7.2), matching the time-triggered rate groups.
         self.ekf.predict(accel_n, gyro_n, dt);
         if outer_tick {
-            let (gps, vio, depth, terrain) = self.scenario.sources();
-            self.fusion.set_gps(gps);
-            self.fusion.set_vio(vio);
+            let (gps_status, vio_status, depth, terrain) = self.scenario.sources();
+            self.fusion.set_gps(gps_status);
+            self.fusion.set_vio(vio_status);
             self.fusion.set_depth(depth);
             self.fusion.set_terrain(terrain);
 
-            if gps != SourceStatus::Lost {
-                let g = self.scenario.gps();
-                // EXPERIMENT: white-noise sensor error (pre-rework).
-                let gpos = self.plant.pos
-                    + Vector3::new(
-                        noise(self.tick as f64 * 0.2, g.pos_noise),
-                        noise(self.tick as f64 * 0.2 + 1.0, g.pos_noise),
-                        noise(self.tick as f64 * 0.2 + 2.0, g.pos_noise),
-                    );
-                let gvel = self.plant.vel
-                    + Vector3::new(
-                        noise(self.tick as f64 * 0.2 + 3.0, g.vel_noise),
-                        noise(self.tick as f64 * 0.2 + 4.0, g.vel_noise),
-                        noise(self.tick as f64 * 0.2 + 5.0, g.vel_noise),
-                    );
-                self.ekf.correct_position(gpos, g.pos_noise);
-                self.ekf.correct_velocity(gvel, g.vel_noise);
+            if let Some((gpos, gvel, pos_noise, vel_noise)) = gps {
+                self.ekf.correct_position(gpos, pos_noise);
+                self.ekf.correct_velocity(gvel, vel_noise);
                 self.fusion.note_aiding();
             }
-            if vio != SourceStatus::Lost {
-                let v = self.scenario.vio();
-                let vpos = self.plant.pos
-                    + Vector3::new(
-                        noise(self.tick as f64 * 0.3, v.pos_noise),
-                        noise(self.tick as f64 * 0.3 + 1.0, v.pos_noise),
-                        noise(self.tick as f64 * 0.3 + 2.0, v.pos_noise),
-                    );
-                let vyaw = yaw + noise(self.tick as f64 * 0.3 + 3.0, v.yaw_noise);
+            if let Some((vpos, vyaw, pos_noise, yaw_noise)) = vio {
                 self.ekf
-                    .correct_vio(vpos, vyaw, v.pos_noise, v.yaw_noise, dt * 5.0);
+                    .correct_vio(vpos, vyaw, pos_noise, yaw_noise, dt * 5.0);
                 self.fusion.note_aiding();
             }
 

@@ -1,6 +1,6 @@
 //! Leptos browser front-end for the TPT dashboard (`spec.txt` §15.4).
 //!
-//! Compiled only with `--features web` after `cargo add leptos`. It renders a
+//! Compiled only with `--features web` (after `cargo add leptos`). It renders a
 //! live [`WebTelemetry`] signal as a small attitude / navigation panel. The
 //! crate is intentionally split so the host- and CI-buildable core (the JSON
 //! bridge + telemetry model in `lib.rs`) needs no wasm toolchain.
@@ -10,7 +10,7 @@ use leptos::*;
 
 /// A small live dashboard panel bound to a telemetry signal.
 #[component]
-pub fn Dashboard(cx: Scope, telemetry: Signal<WebTelemetry>) -> impl IntoView {
+pub fn Dashboard(telemetry: Signal<WebTelemetry>) -> impl IntoView {
     let roll = move || telemetry.get().roll.to_degrees();
     let pitch = move || telemetry.get().pitch.to_degrees();
     let yaw = move || telemetry.get().yaw.to_degrees();
@@ -22,7 +22,7 @@ pub fn Dashboard(cx: Scope, telemetry: Signal<WebTelemetry>) -> impl IntoView {
     let ter = move || health_label(telemetry.get().terrain_healthy);
     let unc = move || telemetry.get().horiz_uncert_m;
 
-    view! { cx,
+    view! {
         <div class="tpt-dashboard">
             <h1>"TPT Flight Control"</h1>
             <div class="row"><span class="k">"Roll"</span><span class="v">{roll}"°"</span></div>

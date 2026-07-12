@@ -198,6 +198,175 @@ pub fn parse_encrypted(
     Some((header, length))
 }
 
+/// TPT-Link Health-channel message id for a [`HealthReport`].
+pub const MSG_HEALTH_REPORT: u8 = 1;
+
+/// Maximum number of motor samples carried in a single [`HealthReport`].
+pub const MAX_HEALTH_MOTORS: usize = 8;
+
+/// Wire size (bytes) of a [`HealthReport`] payload.
+pub const HEALTH_REPORT_LEN: usize =
+    4 + 4 + 4 + 4 + 1 + MAX_HEALTH_MOTORS * (4 + 4 + 1); // 4 floats + count + motors
+
+/// Per-motor health sample carried in a [`HealthReport`].
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct MotorHealthSample {
+    /// Winding / electronics temperature (°C).
+    pub temperature_c: f32,
+    /// Normalized mechanical load in `[0, 1]`.
+    pub load: f32,
+    /// Health flag: `1` = healthy, `0` = unhealthy / failed.
+    pub healthy: u8,
+}
+
+impl MotorHealthSample {
+    /// A zeroed (unknown) sample.
+    pub const fn zero() -> Self {
+        Self {
+            temperature_c: 0.0,
+            load: 0.0,
+            healthy: 0,
+        }
+    }
+}
+
+/// Compact vehicle health / prognostics report (`spec.txt` §16.3, resilience
+/// roadmap) carried on [`Channel::Health`].
+///
+/// Encodes the battery state-of-charge / cell-voltage / temperature / RUL
+/// estimate alongside up to [`MAX_HEALTH_MOTORS`] per-motor samples, so a GCS
+/// or companion computer can trend predictive-health telemetry.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct HealthReport {
+    /// Battery state of charge in `[0, 1]`.
+    pub battery_soc: f32,
+    /// Minimum cell voltage under load (V).
+    pub battery_cell_v_min: f32,
+    /// Pack temperature (°C).
+    pub battery_temp_c: f32,
+    /// Battery remaining-useful-life estimate in `[0, 1]` (1 = new).
+    pub battery_rul: f32,
+    /// Number of valid motor samples in [`Self::motors`].
+    pub motor_count: u8,
+    /// Per-motor samples (only the first `motor_count` are meaningful).
+    pub motors: [MotorHealthSample; MAX_HEALTH_MOTORS],
+}
+
+impl HealthReport {
+    /// An empty report (all-zero, nominal battery).
+    pub const fn empty() -> Self {
+        Self {
+            battery_soc: 1.0,
+            battery_cell_v_min: 0.0,
+            battery_temp_c: 0.0,
+            battery_rul: 1.0,
+            motor_count: 0,
+            motors: [MotorHealthSample::zero(); MAX_HEALTH_MOTORS],
+        }
+    }
+
+    /// Encode into `out` (needs at least [`HEALTH_REPORT_LEN`] bytes). Returns
+    /// the bytes written, or `None` if `out` is too small.
+    pub fn encode(&self, out: &mut [u8]) -> Option<usize> {
+        if out.len() < HEALTH_REPORT_LEN {
+            return None;
+        }
+        let mut o = 0usize;
+        let put_f32 = |out: &mut [u8], o: &mut usize, v: f32| {
+            out[*o..*o + 4].copy_from_slice(&v.to_le_bytes());
+            *o += 4;
+        };
+        put_f32(out, &mut o, self.battery_soc);
+        put_f32(out, &mut o, self.battery_cell_v_min);
+        put_f32(out, &mut o, self.battery_temp_c);
+        put_f32(out, &mut o, self.battery_rul);
+        let count = self.motor_count.min(MAX_HEALTH_MOTORS as u8);
+        out[o] = count;
+        o += 1;
+        for i in 0..count as usize {
+            let m = self.motors[i];
+            put_f32(out, &mut o, m.temperature_c);
+            put_f32(out, &mut o, m.load);
+            out[o] = m.healthy;
+            o += 1;
+        }
+        // Pad any unused motor slots so the wire size is constant.
+        for _ in count as usize..MAX_HEALTH_MOTORS {
+            put_f32(out, &mut o, 0.0);
+            put_f32(out, &mut o, 0.0);
+            out[o] = 0;
+            o += 1;
+        }
+        Some(o)
+    }
+
+    /// Decode a [`HealthReport`] from a payload slice.
+    pub fn decode(p: &[u8]) -> Option<Self> {
+        if p.len() < HEALTH_REPORT_LEN {
+            return None;
+        }
+        let mut o = 0usize;
+        let f = |i: usize| f32::from_le_bytes([p[i], p[i + 1], p[i + 2], p[i + 3]]);
+        let battery_soc = f(o);
+        o += 4;
+        let battery_cell_v_min = f(o);
+        o += 4;
+        let battery_temp_c = f(o);
+        o += 4;
+        let battery_rul = f(o);
+        o += 4;
+        let motor_count = (p[o].min(MAX_HEALTH_MOTORS as u8)) as usize;
+        o += 1;
+        let mut motors = [MotorHealthSample::zero(); MAX_HEALTH_MOTORS];
+        let mut i = 0usize;
+        while i < motor_count {
+            let temperature_c = f(o);
+            o += 4;
+            let load = f(o);
+            o += 4;
+            let healthy = p[o];
+            o += 1;
+            motors[i] = MotorHealthSample {
+                temperature_c,
+                load,
+                healthy,
+            };
+            i += 1;
+        }
+        // The unused (padded) motor slots are simply not read; `decode` returns
+        // the decoded struct and does not need the final cursor.
+        Some(Self {
+            battery_soc,
+            battery_cell_v_min,
+            battery_temp_c,
+            battery_rul,
+            motor_count: motor_count as u8,
+            motors,
+        })
+    }
+}
+
+/// Serialize a [`HealthReport`] as a plaintext (CRC-16) TPT-Link frame on
+/// [`Channel::Health`]. Returns the total bytes written into `out`, or `None`
+/// if `out` is too small.
+pub fn serialize_health(out: &mut [u8], seq: u16, report: &HealthReport) -> Option<usize> {
+    let mut payload = [0u8; HEALTH_REPORT_LEN];
+    let n = report.encode(&mut payload)?;
+    serialize_plain(out, Channel::Health, MSG_HEALTH_REPORT, seq, &payload[..n])
+}
+
+/// Parse a plaintext TPT-Link frame on [`Channel::Health`] into a
+/// [`HealthReport`]. Returns the frame header and the decoded report, or `None`
+/// if the frame is malformed / not a health report.
+pub fn parse_health(buf: &[u8]) -> Option<(FrameHeader, HealthReport)> {
+    let (header, payload) = parse_plain(buf)?;
+    if header.channel != Channel::Health || header.msgid != MSG_HEALTH_REPORT {
+        return None;
+    }
+    let report = HealthReport::decode(payload)?;
+    Some((header, report))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -248,5 +417,46 @@ mod tests {
         let mut buf = out;
         let bad = [0u8; 32];
         assert!(parse_encrypted(&mut buf, &bad, &nonce).is_none());
+    }
+
+    #[test]
+    fn health_report_round_trip() {
+        let mut report = HealthReport::empty();
+        report.battery_soc = 0.82;
+        report.battery_cell_v_min = 3.65;
+        report.battery_temp_c = 31.0;
+        report.battery_rul = 0.74;
+        report.motor_count = 4;
+        for i in 0..4 {
+            report.motors[i] = MotorHealthSample {
+                temperature_c: 40.0 + i as f32,
+                load: 0.5,
+                healthy: 1,
+            };
+        }
+        let mut out = [0u8; 256];
+        let n = serialize_health(&mut out, 11, &report).unwrap();
+        let (h, got) = parse_health(&out[..n]).unwrap();
+        assert_eq!(h.channel, Channel::Health);
+        assert_eq!(h.msgid, MSG_HEALTH_REPORT);
+        assert_eq!(h.seq, 11);
+        assert_eq!(got, report);
+    }
+
+    #[test]
+    fn health_report_rejects_bad_frame() {
+        let mut out = [0u8; 256];
+        let n = serialize_health(&mut out, 1, &HealthReport::empty()).unwrap();
+        out[3] = Channel::Telemetry as u8; // wrong channel
+        assert!(parse_health(&out[..n]).is_none());
+    }
+
+    #[test]
+    fn health_encode_decode_constant_size() {
+        let report = HealthReport::empty();
+        let mut buf = [0u8; HEALTH_REPORT_LEN];
+        let n = report.encode(&mut buf).unwrap();
+        assert_eq!(n, HEALTH_REPORT_LEN);
+        assert_eq!(HealthReport::decode(&buf).unwrap(), report);
     }
 }

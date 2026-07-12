@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TPT Flight Control — SITL in the browser</title>
+    <!-- trunk bundles the `sitl_demo` example (built with the `web` feature)
+         as a wasm module and serves it from this page. -->
+    <link data-trunk rel="rust" data-bin="sitl_demo" data-features="web" data-wasm-opt="z" />
+    <style>
+      body {
+        margin: 0;
+        font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+        background: #0f1419;
+        color: #e6e6e6;
+        display: flex;
+        min-height: 100vh;
+        align-items: center;
+        justify-content: center;
+      }
+      .tpt-dashboard {
+        background: #161b22;
+        border: 1px solid #2b333d;
+        border-radius: 12px;
+        padding: 1.2rem 1.6rem;
+        min-width: 280px;
+        box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4);
+      }
+      .tpt-dashboard h1 {
+        font-size: 1.05rem;
+        margin: 0 0 0.6rem;
+        letter-spacing: 0.04em;
+        color: #58a6ff;
+      }
+      .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 1.2rem;
+        padding: 0.18rem 0;
+        font-variant-numeric: tabular-nums;
+      }
+      .row .k {
+        color: #8b949e;
+      }
+      .row .v {
+        font-weight: 600;
+      }
+      hr {
+        border: none;
+        border-top: 1px solid #2b333d;
+        margin: 0.6rem 0;
+      }
+    </style>
+  </head>
+  <body></body>
+</html>

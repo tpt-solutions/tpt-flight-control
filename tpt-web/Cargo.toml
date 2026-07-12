@@ -12,15 +12,26 @@ tpt-core.workspace = true
 tpt-sensor-fusion.workspace = true
 tpt-gcs.workspace = true
 
-# The leptos UI is enabled by the `web` feature. Following the project's Kani
-# convention, `leptos` is intentionally *not* declared here: it is only needed
-# when building the wasm front-end and is supplied by the developer via
-# `cargo add leptos --features web`. This keeps the default (host) build free of
-# the heavy wasm UI dependency tree.
+# `leptos` is the browser UI framework for the live dashboard. It is declared
+# as an *optional* dependency enabled by the `web` feature (instead of the
+# older `cargo add leptos --features web` dance) so the WASM demo builds
+# reproducibly with a single command and the host/test build stays free of the
+# heavy wasm UI dependency tree. See `examples/sitl_demo.rs` and
+# `docs/architecture-web.md`.
+leptos = { version = "0.6", optional = true, features = ["csr"] }
+
+# `tpt-sim` powers the in-browser SITL demo: a GPS-denied scenario is run
+# client-side and streamed into the dashboard (no vehicle, no install).
+tpt-sim = { workspace = true, optional = true }
+
 [features]
 default = []
-web = []
+web = ["dep:leptos", "dep:tpt-sim"]
 
 [[example]]
 name = "dashboard"
+required-features = ["web"]
+
+[[example]]
+name = "sitl_demo"
 required-features = ["web"]
