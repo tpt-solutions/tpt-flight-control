@@ -178,12 +178,10 @@ impl Sim {
                 let _ = self.fsm.handle(tpt_core::FlightEvent::Arm);
                 let _ = self.fsm.handle(tpt_core::FlightEvent::CommandTakeoff);
             }
-            tpt_core::FlightMode::Takeoff => {
-                if self.plant.pos.z < self.target.z + 0.05 {
-                    let _ = self
-                        .fsm
-                        .handle(tpt_core::FlightEvent::ReachedTargetAltitude);
-                }
+            tpt_core::FlightMode::Takeoff if self.plant.pos.z < self.target.z + 0.05 => {
+                let _ = self
+                    .fsm
+                    .handle(tpt_core::FlightEvent::ReachedTargetAltitude);
             }
             _ => {}
         }

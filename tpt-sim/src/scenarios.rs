@@ -593,10 +593,8 @@ impl GpsDeniedSim {
                 let _ = self.fsm.handle(FlightEvent::Arm);
                 let _ = self.fsm.handle(FlightEvent::CommandTakeoff);
             }
-            FlightMode::Takeoff => {
-                if self.plant.pos.z < self.target.z + 0.05 {
-                    let _ = self.fsm.handle(FlightEvent::ReachedTargetAltitude);
-                }
+            FlightMode::Takeoff if self.plant.pos.z < self.target.z + 0.05 => {
+                let _ = self.fsm.handle(FlightEvent::ReachedTargetAltitude);
             }
             _ => {}
         }

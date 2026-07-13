@@ -100,7 +100,7 @@ const K: [u32; 64] = [
 
 #[inline]
 fn rotr(x: u32, n: u32) -> u32 {
-    (x >> n) | (x << (32 - n))
+    x.rotate_right(n)
 }
 
 fn compress(h: &mut [u32; 8], block: &[u8; 64]) {
