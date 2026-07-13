@@ -44,6 +44,16 @@ cargo test -p tpt-protocols --all-features
 cargo test -p tpt-sim --all-features
 cargo test -p tpt-backend-bare-metal --all-features
 cargo test -p tpt-sovereign-toolchain --all-features
+cargo test -p tpt-web --features web
+```
+
+`tpt-gcs --features gui` needs X11/GTK system packages to link (`eframe`/
+`winit`), so it's excluded from the `--all-features` sweep above and gets
+its own CI job (`gui` in `.github/workflows/ci.yml`) with an `apt-get
+install` step instead:
+
+```sh
+cargo test -p tpt-gcs --features gui
 ```
 
 Run a single test:
@@ -79,11 +89,13 @@ scripts/vendor.sh
 ```
 
 GUI/wasm crates are opt-in via feature flags so the default workspace build
-stays toolchain-light:
+stays toolchain-light: `egui`/`eframe` are optional deps of `tpt-gcs` behind
+`gui`, and `leptos`/`tpt-sim` are optional deps of `tpt-web` behind `web`:
 
 ```sh
-cargo run -p tpt-gcs --features gui          # egui/eframe desktop GCS
-cargo build -p tpt-web --features web --target wasm32-unknown-unknown --example dashboard  # leptos dashboard, after `cargo add leptos --features web`
+cargo run -p tpt-gcs --features gui                                    # egui/eframe desktop GCS
+cargo build -p tpt-web --features web --target wasm32-unknown-unknown --example dashboard
+trunk serve --release --example sitl_demo -p tpt-web --features web    # live browser SITL demo, no install
 ```
 
 ## Architecture
@@ -112,7 +124,7 @@ not held to the same constraints.
 |---|---|
 | `tpt-abstractions` | Trait contracts (`Imu`, `Gnss`, `VisualSensor`, `LidarSensor`, `RadarAltimeter`, `SpatialMap`, `TerrainDatabase`, `Motor`, `ControlSurface`, `Scheduler`, `PartitionChannel`, `MemoryPool`, `PowerSystem`) — the only thing core crates depend on to reach hardware/OS |
 | `tpt-math` | Verified-friendly linear algebra, quaternions, Kalman primitives (`nalgebra` `no_std`); carries the `tpt-math` Kani harnesses |
-| `tpt-core` | Control laws (`control`), envelope protection (`envelope`), flight mode FSM (`fsm`), rate-group scheduler (`scheduler`), guidance/nav (`guidance`, `nav`), and (behind `triple-redundancy`) voting/consensus (`redundancy`) |
+| `tpt-core` | Control laws (`control`), envelope protection (`envelope`), flight mode FSM (`fsm`), rate-group scheduler (`scheduler`), guidance/nav (`guidance`, `nav`), DO-160 fault scrubbing/prognostics (`prognostics`); feature-gated autonomy: `autopilot`/`autopilot_avoidance` (mission sequencing, geofence, failsafe, octree-based obstacle avoidance), `swarm`/`formation` (peer telemetry, relative-position keeping, upwash formation flight), `glide` (engine-out best-glide/landing-site search); and (behind `triple-redundancy`) voting/consensus (`redundancy`) |
 | `tpt-sensor-fusion` | AHRS/EKF (`ahrs`, `ekf`), `NavHealth` reporting (`nav_health`), dissimilar-nav cross-checking (`dissimilar`) |
 | `tpt-mapping` | GPS-denied navigation: `vio/`, `slam/`, `tan/` (TERCOM), `octree/` (sparse voxel octree); carries the `tpt-mapping` Kani harnesses |
 | `tpt-mixer` | Actuator allocation: `mixer-quad`/`mixer-dep`/`mixer-tilt`/`mixer-surface` feature-gated strategies, fault-tolerant reallocation |

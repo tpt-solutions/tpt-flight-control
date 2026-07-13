@@ -84,7 +84,7 @@ software-in-the-loop (`tpt-sim`) implement those traits.
 |---|---|
 | `tpt-abstractions` | Core trait contracts: `Imu`, `Gnss`, `VisualSensor`, `LidarSensor`, `RadarAltimeter`, `SpatialMap`, `TerrainDatabase`, `Motor`, `ControlSurface`, `Scheduler`, … |
 | `tpt-math` | `no_std` linear algebra, quaternions, Kalman primitives (Kani-verified). |
-| `tpt-core` | Control laws (PID/EKF cascaded loops), envelope protection, redundancy, GPS-denied nav. |
+| `tpt-core` | Control laws (PID/EKF cascaded loops), envelope protection, redundancy, GPS-denied nav, autopilot (mission sequencing/geofence/failsafe/obstacle avoidance), swarm/formation flight, engine-out glide, DO-160 fault scrubbing & prognostics. |
 | `tpt-sensor-fusion` | AHRS (complementary filter + EKF), GPS-degraded fusion state machine, dissimilar-nav monitor. |
 | `tpt-mapping` | VIO, LiDAR SLAM (ICP), TERCOM/TAN, Sparse Voxel Octree obstacle maps. |
 | `tpt-mixer` | Quad-X, DEP fault-tolerant, tilt-rotor transition mixing. |
@@ -117,7 +117,8 @@ hardware, crewed flight tests, certification authorities, or commercial partners
 | **3** eVTOL & LiDAR SLAM | DEP/tilt mixers, ICP SLAM, TAN, PikeOS, TPT-Link | ✅ code complete, **flight pending** | 2D ICP only (no NDT/3D yet). *Crewed eVTOL demo & DO-178C DAL-C engagement require partners/hardware.* |
 | **4** Certification & sovereign | seL4, sovereign toolchain, Kani proofs, map signing, anti-spoofing, ChaCha20-Poly1305 | ⚠️ code complete, **verification pending** | Kani harnesses authored but **not yet run** under `kani-compiler` (Linux-only; this dev env is Windows). DO-178C DAL-C/B sign-off requires authority. |
 | **5** Transport category | Triple/quad dissimilar redundancy, VxWorks, ARINC 429/AFDX | ⚠️ code complete, **certification pending** | ARP 4754A/4761 SSA scaffolded; DO-178C DAL-A & airframe integration require authority/flight test. |
-| **Cross-cutting** | Envelope protection, `tpt-web`, docs, traceability matrix, replay tool | ✅ mostly complete | KiCad PCBs, commercial-artifact packaging, and full SSA closure are non-code. |
+| **Resilience & autonomy** | Autopilot (mission/geofence/failsafe), reactive obstacle avoidance, swarm coordination, formation flight, engine-out glide guidance, DO-160 fault scrubbing/prognostics | ✅ complete | Feature-gated (`autopilot`, `autopilot-avoidance`, `swarm`, `formation`, `glide`) in `tpt-core`; unit-tested. *Flight validation requires hardware.* |
+| **Cross-cutting** | Envelope protection, `tpt-web` (incl. browser SITL demo), docs, traceability matrix, replay/diff tool | ✅ mostly complete | KiCad PCBs, commercial-artifact packaging, and full SSA closure are non-code. |
 
 **Bottom line:** every layer that *can* be proven in software — control laws,
 sensor fusion, GPS-denied navigation, mapping, mixing, backends, protocols, and
@@ -149,7 +150,7 @@ cargo test --workspace
 cargo run -p tpt-sim --example gps_denied_quickstart
 
 # 5. (optional) Watch the same scenario live in a browser — no install
-#    trunk serve --release --example sitl_demo -p tpt-web --features web
+trunk serve --release --example sitl_demo -p tpt-web --features web
 ```
 
 `gps_denied_quickstart` accepts a scenario name — `Nominal`, `UrbanCanyon`,
@@ -167,8 +168,9 @@ todo.md                      Milestone checklist (source of truth for status)
 CONTRIBUTING.md              DCO sign-off + domain-expert review process
 CODEOWNERS                   Flight-/mapping-critical review requirements
 docs/                        Architecture deep-dives (redundancy, dissimilar-nav, web)
-certification/               Traceability matrix, SSA, CI qualification notes,
-                              path-to-type-certification.md (what's non-code)
+certification/               PSAC, SVP, SCI, SAS, SSA, DO-160/DO-254/DO-326A
+                              scaffolds, traceability matrix, CI qualification
+                              notes, path-to-type-certification.md (non-code)
 tpt-*/                       Workspace crates (see crate map above)
 reference-hardware/          Open flight-computer KiCad designs
 scripts/                     Audit, vendoring, reproducible-build tooling
@@ -179,6 +181,10 @@ scripts/                     Audit, vendoring, reproducible-build tooling
 - **Design spec:** [`spec.txt`](spec.txt) — architecture, principles, roadmap, security.
 - **Architecture docs:** [`docs/`](docs/) — redundancy voting, dissimilar
   navigation monitoring, web dashboard.
+- **Certification package:** [`certification/`](certification/) — PSAC, SVP,
+  SCI, SAS, SSA, and DO-160/DO-254/DO-326A scaffolds, plus the traceability
+  matrix; see [`path-to-type-certification.md`](certification/path-to-type-certification.md)
+  for what's structurally outside a repository's reach.
 - **Contributing:** [`CONTRIBUTING.md`](CONTRIBUTING.md) — DCO sign-off and
   CODEOWNERS-gated review for flight-critical code.
 - **Milestones:** [`todo.md`](todo.md) — per-phase checklist and honest status.
