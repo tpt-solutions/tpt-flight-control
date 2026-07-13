@@ -42,11 +42,7 @@ impl PowerSystem for MockPowerSystem {
     }
 
     fn available_power_w(&self) -> f64 {
-        if self.brownout {
-            40.0
-        } else {
-            200.0
-        }
+        if self.brownout { 40.0 } else { 200.0 }
     }
 
     fn is_nominal(&self) -> bool {

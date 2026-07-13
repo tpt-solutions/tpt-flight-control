@@ -201,3 +201,90 @@ pub fn attitude_vector(s: &Sim) -> Vector3<f64> {
     let (r, p, y) = s.plant().quat.euler_angles();
     Vector3::new(r, p, y)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn new_sim_starts_disarmed_at_rest() {
+        let sim = Sim::new();
+        assert_eq!(sim.target(), PositionTarget::origin());
+        assert_eq!(sim.motors(), &[0.0; 4]);
+        assert_eq!(sim.max_attitude_seen(), 0.0);
+        assert_eq!(sim.max_plant_attitude_seen(), 0.0);
+        assert_eq!(sim.plant().pos, Vector3::zeros());
+    }
+
+    #[test]
+    fn default_matches_new() {
+        let sim = Sim::default();
+        assert_eq!(sim.target(), Sim::new().target());
+    }
+
+    #[test]
+    fn with_initial_attitude_seeds_the_plant() {
+        let sim = Sim::with_initial_attitude(0.1, 0.0, 0.0);
+        let (roll, _pitch, _yaw) = sim.plant().quat.euler_angles();
+        assert!((roll - 0.1).abs() < 1e-9);
+    }
+
+    #[test]
+    fn set_target_updates_target() {
+        let mut sim = Sim::new();
+        let mut target = PositionTarget::origin();
+        target.x = 3.0;
+        target.z = -1.5;
+        sim.set_target(target);
+        assert_eq!(sim.target().x, 3.0);
+        assert_eq!(sim.target().z, -1.5);
+    }
+
+    #[test]
+    fn run_executes_the_requested_number_of_steps() {
+        let mut sim = Sim::new();
+        sim.run(0.01, 0.001); // 10 steps at 1ms.
+        assert_eq!(sim.tick, 10);
+    }
+
+    #[test]
+    fn step_produces_finite_in_range_motor_commands() {
+        let mut sim = Sim::new();
+        for _ in 0..50 {
+            sim.step(0.001);
+        }
+        for m in sim.motors() {
+            assert!(m.is_finite());
+            assert!((0.0..=1.0).contains(m), "motor cmd out of range: {}", m);
+        }
+    }
+
+    #[test]
+    fn fsm_progresses_from_disarmed_through_takeoff() {
+        let mut sim = Sim::new();
+        assert_eq!(sim.fsm.mode(), tpt_core::FlightMode::Disarmed);
+        // First step arms and commands takeoff.
+        sim.step(0.001);
+        assert_eq!(sim.fsm.mode(), tpt_core::FlightMode::Takeoff);
+    }
+
+    #[test]
+    fn attitude_vector_matches_plant_euler_angles() {
+        let sim = Sim::with_initial_attitude(0.05, -0.05, 0.2);
+        let v = attitude_vector(&sim);
+        let (r, p, y) = sim.plant().quat.euler_angles();
+        assert_eq!(v, Vector3::new(r, p, y));
+    }
+
+    #[test]
+    fn last_setpoint_updates_after_outer_loop_tick() {
+        let mut sim = Sim::new();
+        // Outer guidance loop runs every 5th tick (dt = 1ms -> 200 Hz).
+        for _ in 0..5 {
+            sim.step(0.001);
+        }
+        // Hovering at the origin target should command a non-zero thrust
+        // to counter gravity, not the zero-initialized default.
+        assert!(sim.last_setpoint().thrust > 0.0);
+    }
+}

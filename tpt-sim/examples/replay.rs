@@ -46,14 +46,8 @@ fn main() {
     let log = record(&mut sim, 30.0, 0.001);
     let replayed = replay(&log);
     let d = diff(&log, &replayed);
-    println!(
-        "frames        : {} (recorded == replayed)",
-        d.frames
-    );
-    println!(
-        "max |Δpos|    : {:.3e} m",
-        d.max_pos
-    );
+    println!("frames        : {} (recorded == replayed)", d.frames);
+    println!("max |Δpos|    : {:.3e} m", d.max_pos);
     println!("max |Δvel|    : {:.3e} m/s", d.max_vel);
     println!("max |Δatt|    : {:.3e} rad", d.max_att);
     println!("max |Δuncert| : {:.3e} m", d.max_uncert);
@@ -69,7 +63,10 @@ fn main() {
         }
     };
     let disk = diff(&parsed, &replay(&parsed));
-    println!("csv round-trip: {} frames parsed, max |Δpos| {:.3e} m", disk.frames, disk.max_pos);
+    println!(
+        "csv round-trip: {} frames parsed, max |Δpos| {:.3e} m",
+        disk.frames, disk.max_pos
+    );
 
     // 3) Determinism gate.
     let tol = 1e-6;

@@ -129,3 +129,145 @@ pub fn sanitize_motors(m: &mut [f64; 4]) {
         *v = clamp(*v, 0.0, 1.0);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Collective command that makes `t_total == MASS * GRAVITY` (see the
+    // `T_MAX` doc comment): all four motors equal, summing to 0.5.
+    const HOVER_MOTORS: [f64; 4] = [0.125, 0.125, 0.125, 0.125];
+
+    #[test]
+    fn new_plant_is_at_rest_at_origin() {
+        let p = Plant::new();
+        assert_eq!(p.pos, Vector3::zeros());
+        assert_eq!(p.vel, Vector3::zeros());
+        assert_eq!(p.omega, Vector3::zeros());
+        assert!((p.quat.quaternion().norm() - 1.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn default_matches_new() {
+        let p = Plant::default();
+        assert_eq!(p.pos, Plant::new().pos);
+    }
+
+    #[test]
+    fn with_initial_attitude_sets_euler_angles() {
+        let p = Plant::with_initial_attitude(0.1, -0.2, 0.3);
+        let (r, pi, y) = p.quat.euler_angles();
+        assert!((r - 0.1).abs() < 1e-9);
+        assert!((pi - (-0.2)).abs() < 1e-9);
+        assert!((y - 0.3).abs() < 1e-9);
+        // Still at rest otherwise.
+        assert_eq!(p.pos, Vector3::zeros());
+        assert_eq!(p.omega, Vector3::zeros());
+    }
+
+    #[test]
+    fn hover_thrust_holds_altitude() {
+        let mut p = Plant::new();
+        for _ in 0..1000 {
+            p.step(0.001, &HOVER_MOTORS);
+        }
+        assert!(p.vel.z.abs() < 1e-6, "vz drifted: {}", p.vel.z);
+        assert!(p.pos.z.abs() < 1e-6, "z drifted: {}", p.pos.z);
+    }
+
+    #[test]
+    fn zero_thrust_falls_under_gravity() {
+        let mut p = Plant::new();
+        p.step(0.1, &[0.0, 0.0, 0.0, 0.0]);
+        // NED: z is down-positive, so falling means vel.z and pos.z grow.
+        assert!((p.vel.z - GRAVITY * 0.1).abs() < 1e-9);
+        assert!(p.pos.z > 0.0);
+        assert!((p.pos.x).abs() < 1e-12);
+        assert!((p.pos.y).abs() < 1e-12);
+    }
+
+    #[test]
+    fn roll_command_only_produces_roll_torque() {
+        let mut p = Plant::new();
+        // M1, M4 up / M2, M3 down relative to hover -> pure roll differential
+        // (matches the ROLL basis vector [1, -1, -1, 1]).
+        let motors = [0.15, 0.10, 0.10, 0.15];
+        p.step(0.001, &motors);
+        assert!(p.omega.x.abs() > 0.0, "expected nonzero roll rate");
+        assert!(
+            p.omega.y.abs() < 1e-9,
+            "unexpected pitch rate: {}",
+            p.omega.y
+        );
+        assert!(p.omega.z.abs() < 1e-9, "unexpected yaw rate: {}", p.omega.z);
+    }
+
+    #[test]
+    fn pitch_command_only_produces_pitch_torque() {
+        let mut p = Plant::new();
+        // Matches the PITCH basis vector [1, -1, 1, -1].
+        let motors = [0.15, 0.10, 0.15, 0.10];
+        p.step(0.001, &motors);
+        assert!(
+            p.omega.x.abs() < 1e-9,
+            "unexpected roll rate: {}",
+            p.omega.x
+        );
+        assert!(p.omega.y.abs() > 0.0, "expected nonzero pitch rate");
+        assert!(p.omega.z.abs() < 1e-9, "unexpected yaw rate: {}", p.omega.z);
+    }
+
+    #[test]
+    fn yaw_command_only_produces_yaw_torque() {
+        let mut p = Plant::new();
+        // Matches the YAW basis vector [1, 1, -1, -1].
+        let motors = [0.15, 0.15, 0.10, 0.10];
+        p.step(0.001, &motors);
+        assert!(
+            p.omega.x.abs() < 1e-9,
+            "unexpected roll rate: {}",
+            p.omega.x
+        );
+        assert!(
+            p.omega.y.abs() < 1e-9,
+            "unexpected pitch rate: {}",
+            p.omega.y
+        );
+        assert!(p.omega.z.abs() > 0.0, "expected nonzero yaw rate");
+    }
+
+    #[test]
+    fn quaternion_stays_normalized_after_many_steps() {
+        let mut p = Plant::new();
+        let motors = [0.2, 0.1, 0.15, 0.1];
+        for _ in 0..500 {
+            p.step(0.001, &motors);
+        }
+        assert!((p.quat.quaternion().norm() - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn imu_reports_hover_specific_force_and_body_rates() {
+        let mut p = Plant::new();
+        p.omega = Vector3::new(0.1, -0.2, 0.3);
+        let (accel, gyro) = p.imu(&HOVER_MOTORS);
+        assert!((accel.z - GRAVITY).abs() < 1e-9);
+        assert!((accel.x).abs() < 1e-12);
+        assert!((accel.y).abs() < 1e-12);
+        assert_eq!(gyro, p.omega);
+    }
+
+    #[test]
+    fn imu_reports_zero_specific_force_at_zero_thrust() {
+        let p = Plant::new();
+        let (accel, _gyro) = p.imu(&[0.0, 0.0, 0.0, 0.0]);
+        assert_eq!(accel, Vector3::zeros());
+    }
+
+    #[test]
+    fn sanitize_motors_clamps_to_unit_range() {
+        let mut m = [-0.5, 0.3, 1.2, 2.0];
+        sanitize_motors(&mut m);
+        assert_eq!(m, [0.0, 0.3, 1.0, 1.0]);
+    }
+}

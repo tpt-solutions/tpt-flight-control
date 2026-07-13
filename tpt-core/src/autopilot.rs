@@ -172,7 +172,9 @@ impl GeofenceMonitor {
             return GeofenceStatus::Breach;
         }
         let p = state.position;
-        let near = |a: f64, lo: f64, hi: f64| (a - lo).abs() < self.warning_margin || (hi - a).abs() < self.warning_margin;
+        let near = |a: f64, lo: f64, hi: f64| {
+            (a - lo).abs() < self.warning_margin || (hi - a).abs() < self.warning_margin
+        };
         if near(p.x, self.fence.min.x, self.fence.max.x)
             || near(p.y, self.fence.min.y, self.fence.max.y)
             || near(p.z, self.fence.min.z, self.fence.max.z)

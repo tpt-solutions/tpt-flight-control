@@ -19,16 +19,16 @@ use tpt_sim::{GpsDeniedSim, Scenario};
 fn main() {
     let scenario = env::args()
         .nth(1)
-        .and_then(|s| match s.as_str() {
-            "Nominal" => Some(Scenario::Nominal),
-            "UrbanCanyon" => Some(Scenario::UrbanCanyon),
-            "Jamming" => Some(Scenario::Jamming),
-            "Indoor" => Some(Scenario::Indoor),
-            "SensorDegradation" => Some(Scenario::SensorDegradation),
-            "TotalBlackout" => Some(Scenario::TotalBlackout),
+        .map(|s| match s.as_str() {
+            "Nominal" => Scenario::Nominal,
+            "UrbanCanyon" => Scenario::UrbanCanyon,
+            "Jamming" => Scenario::Jamming,
+            "Indoor" => Scenario::Indoor,
+            "SensorDegradation" => Scenario::SensorDegradation,
+            "TotalBlackout" => Scenario::TotalBlackout,
             other => {
                 eprintln!("unknown scenario '{other}'; using Jamming");
-                Some(Scenario::Jamming)
+                Scenario::Jamming
             }
         })
         .unwrap_or(Scenario::Jamming);

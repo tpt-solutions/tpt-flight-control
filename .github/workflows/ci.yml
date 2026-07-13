@@ -39,6 +39,51 @@ jobs:
       - run: cargo build --workspace --verbose
       - run: cargo test  --workspace --verbose
 
+  feature-matrix:
+    name: Build & Test (feature-gated)
+    runs-on: ubuntu-latest
+    # `cargo test --workspace` above only exercises each crate's *default*
+    # features. Several crates gate real functionality (and its tests)
+    # behind non-default flags — e.g. tpt-core's `autopilot`, `swarm`,
+    # `formation`, `glide`, and `triple-redundancy` modules (default = [])
+    # — so without this job those tests are never compiled or run by CI,
+    # even though they exist and pass locally. `--all-features` is safe for
+    # these crates specifically: their features are additive logic modules
+    # with no conflicting/mutually-exclusive flags. `tpt-web --features web`
+    # is included too — despite pulling in `leptos`/`wasm-bindgen`, it
+    # compiles and links fine on a native host with no extra system
+    # packages. `tpt-gcs --features gui` needs X11/GTK system packages
+    # (pulls in `eframe`/`winit`), so it gets its own `gui` job below with
+    # an `apt-get install` step instead of living here.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test -p tpt-core --all-features --verbose
+      - run: cargo test -p tpt-mixer --all-features --verbose
+      - run: cargo test -p tpt-sensor-fusion --all-features --verbose
+      - run: cargo test -p tpt-mapping --all-features --verbose
+      - run: cargo test -p tpt-protocols --all-features --verbose
+      - run: cargo test -p tpt-sim --all-features --verbose
+      - run: cargo test -p tpt-backend-bare-metal --all-features --verbose
+      - run: cargo test -p tpt-sovereign-toolchain --all-features --verbose
+      - run: cargo test -p tpt-web --features web --verbose
+
+  gui:
+    name: Build & Test (tpt-gcs gui)
+    runs-on: ubuntu-latest
+    # `tpt-gcs --features gui` pulls in `eframe`/`egui`, which need X11/GTK
+    # dev headers to link on Linux. Package list matches egui's own CI
+    # (github.com/emilk/egui .github/workflows/rust.yml) for the same
+    # eframe major version.
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install GUI system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libxkbcommon-dev libssl-dev libgtk-3-dev
+      - run: cargo test -p tpt-gcs --features gui --verbose
+
   no-std:
     name: Build no_std core crates
     runs-on: ubuntu-latest

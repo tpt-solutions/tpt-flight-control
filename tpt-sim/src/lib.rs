@@ -26,7 +26,5 @@ pub mod sim;
 pub mod environment;
 
 pub use plant::Plant;
-pub use scenarios::{
-    GpsDeniedSim, ObstacleField, Scenario, SenseBatch, Sphere,
-};
+pub use scenarios::{GpsDeniedSim, ObstacleField, Scenario, SenseBatch, Sphere};
 pub use sim::Sim;

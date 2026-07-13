@@ -55,3 +55,27 @@ fn flight_mode_label(m: tpt_sensor_fusion::FusionMode) -> &'static str {
 fn health_label(healthy: bool) -> &'static str {
     if healthy { "OK" } else { "LOST" }
 }
+
+// The `Dashboard` component itself renders through `leptos`'s reactive
+// system and needs a browser/wasm test harness (not part of this crate's
+// toolchain — see `CLAUDE.md`); these pure label helpers are the part of
+// this module that can be unit tested on the host.
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn flight_mode_label_covers_all_variants() {
+        use tpt_sensor_fusion::FusionMode;
+        assert_eq!(flight_mode_label(FusionMode::GpsAided), "GPS-aided");
+        assert_eq!(flight_mode_label(FusionMode::Coast), "Coast (INS only)");
+        assert_eq!(flight_mode_label(FusionMode::VisualAided), "Visual-aided");
+        assert_eq!(flight_mode_label(FusionMode::TerrainAided), "Terrain-aided");
+    }
+
+    #[test]
+    fn health_label_reflects_boolean() {
+        assert_eq!(health_label(true), "OK");
+        assert_eq!(health_label(false), "LOST");
+    }
+}

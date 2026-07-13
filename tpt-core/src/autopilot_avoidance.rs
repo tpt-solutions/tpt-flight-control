@@ -11,8 +11,8 @@
 //! This is the reactive layer; strategic path-planning is out of scope here.
 
 use crate::state::PositionTarget;
-use tpt_math::Vector3;
 use tpt_mapping::octree::SparseVoxelOctree;
+use tpt_math::Vector3;
 
 /// Maximum obstacles considered per avoidance query (fixed buffer, no alloc).
 pub const MAX_AVOID_OBSTACLES: usize = 16;
@@ -77,11 +77,7 @@ impl<'a, const CAP: usize> ObstacleAvoider<'a, CAP> {
     /// `Vector3::zeros()`.
     ///
     /// `travel_dir` should be a unit vector; it is normalized internally.
-    pub fn lookahead_offset(
-        &self,
-        pos: Vector3<f64>,
-        travel_dir: Vector3<f64>,
-    ) -> Vector3<f64> {
+    pub fn lookahead_offset(&self, pos: Vector3<f64>, travel_dir: Vector3<f64>) -> Vector3<f64> {
         let dir = if travel_dir.norm() > 1e-6 {
             travel_dir / travel_dir.norm()
         } else {
@@ -117,7 +113,12 @@ mod tests {
         desired.x = 10.0; // want to go straight into it
         let t = avd.mitigate(desired, pos);
         // Target should be pushed back (negative x offset) to route around.
-        assert!(t.x < desired.x, "target x {} should be < {}", t.x, desired.x);
+        assert!(
+            t.x < desired.x,
+            "target x {} should be < {}",
+            t.x,
+            desired.x
+        );
     }
 
     #[test]

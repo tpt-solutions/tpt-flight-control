@@ -117,7 +117,12 @@ mod tests {
         let slot90 = c.slot_in_world(Vector3::zeros(), core::f64::consts::FRAC_PI_2);
         // At 90° yaw the body +x (behind, -5) maps to world -y.
         assert!(slot90.y < 0.0, "slot90.y {}", slot90.y);
-        assert!((slot0.x - slot90.y).abs() < 1e-9, "{} vs {}", slot0.x, slot90.y);
+        assert!(
+            (slot0.x - slot90.y).abs() < 1e-9,
+            "{} vs {}",
+            slot0.x,
+            slot90.y
+        );
     }
 
     #[test]

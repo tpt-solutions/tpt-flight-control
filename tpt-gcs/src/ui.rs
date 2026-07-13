@@ -22,9 +22,8 @@ pub struct GcsApp {
     log: String,
 }
 
-impl GcsApp {
-    /// Construct the app (called by `eframe` via `Box::new`).
-    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+impl Default for GcsApp {
+    fn default() -> Self {
         Self {
             latest: Telemetry::zeroed(),
             wp_x: "0.0".into(),
@@ -34,6 +33,13 @@ impl GcsApp {
             pending: None,
             log: String::new(),
         }
+    }
+}
+
+impl GcsApp {
+    /// Construct the app (called by `eframe` via `Box::new`).
+    pub fn new(_cc: &eframe::CreationContext<'_>) -> Self {
+        Self::default()
     }
 
     /// Feed the latest telemetry sample from the link layer.
@@ -104,21 +110,12 @@ impl eframe::App for GcsApp {
                 ui.text_edit_singleline(&mut self.wp_z);
                 ui.text_edit_singleline(&mut self.wp_yaw);
                 if ui.button("Send WP").clicked() {
-                    if let (Ok(x), Ok(y), Ok(z), Ok(yaw)) = (
-                        self.wp_x.parse::<f64>(),
-                        self.wp_y.parse::<f64>(),
-                        self.wp_z.parse::<f64>(),
-                        self.wp_yaw.parse::<f64>(),
-                    ) {
-                        self.pending = Some(Command::SetWaypoint {
-                            x,
-                            y,
-                            z,
-                            yaw: yaw.to_radians(),
-                        });
-                        self.log_line("waypoint sent");
-                    } else {
-                        self.log_line("invalid waypoint");
+                    match parse_waypoint(&self.wp_x, &self.wp_y, &self.wp_z, &self.wp_yaw) {
+                        Some(cmd) => {
+                            self.pending = Some(cmd);
+                            self.log_line("waypoint sent");
+                        }
+                        None => self.log_line("invalid waypoint"),
                     }
                 }
             });
@@ -127,5 +124,85 @@ impl eframe::App for GcsApp {
             ui.label("Log:");
             ui.monospace(&self.log);
         });
+    }
+}
+
+/// Parse the waypoint entry fields into a [`Command::SetWaypoint`], or
+/// `None` if any field fails to parse as a number. `yaw_deg` is in degrees
+/// and is converted to radians for the wire command.
+fn parse_waypoint(x: &str, y: &str, z: &str, yaw_deg: &str) -> Option<Command> {
+    let x = x.parse::<f64>().ok()?;
+    let y = y.parse::<f64>().ok()?;
+    let z = z.parse::<f64>().ok()?;
+    let yaw = yaw_deg.parse::<f64>().ok()?;
+    Some(Command::SetWaypoint {
+        x,
+        y,
+        z,
+        yaw: yaw.to_radians(),
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn default_app_has_seeded_waypoint_fields_and_no_pending_command() {
+        let app = GcsApp::default();
+        assert_eq!(app.wp_x, "0.0");
+        assert_eq!(app.wp_y, "0.0");
+        assert_eq!(app.wp_z, "-2.0");
+        assert_eq!(app.wp_yaw, "0.0");
+        assert_eq!(app.latest, Telemetry::zeroed());
+        assert!(app.log.is_empty());
+    }
+
+    #[test]
+    fn ingest_replaces_latest_telemetry() {
+        let mut app = GcsApp::default();
+        let t = Telemetry {
+            battery: 0.42,
+            ..Telemetry::zeroed()
+        };
+        app.ingest(t);
+        assert_eq!(app.latest, t);
+    }
+
+    #[test]
+    fn take_pending_consumes_the_command() {
+        let mut app = GcsApp::default();
+        assert_eq!(app.take_pending(), None);
+        app.pending = Some(Command::Arm);
+        assert_eq!(app.take_pending(), Some(Command::Arm));
+        assert_eq!(app.take_pending(), None, "second take should be empty");
+    }
+
+    #[test]
+    fn log_line_appends_with_trailing_newline() {
+        let mut app = GcsApp::default();
+        app.log_line("arm");
+        app.log_line("disarm");
+        assert_eq!(app.log, "arm\ndisarm\n");
+    }
+
+    #[test]
+    fn parse_waypoint_converts_degrees_to_radians() {
+        let cmd = parse_waypoint("1.0", "2.0", "-3.0", "180.0").expect("valid input");
+        match cmd {
+            Command::SetWaypoint { x, y, z, yaw } => {
+                assert_eq!(x, 1.0);
+                assert_eq!(y, 2.0);
+                assert_eq!(z, -3.0);
+                assert!((yaw - core::f64::consts::PI).abs() < 1e-12);
+            }
+            other => panic!("unexpected: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn parse_waypoint_rejects_non_numeric_field() {
+        assert_eq!(parse_waypoint("nope", "0.0", "0.0", "0.0"), None);
+        assert_eq!(parse_waypoint("0.0", "0.0", "0.0", ""), None);
     }
 }

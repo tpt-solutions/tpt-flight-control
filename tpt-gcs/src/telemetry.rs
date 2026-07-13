@@ -81,3 +81,64 @@ impl Default for Telemetry {
         Self::zeroed()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn zeroed_is_disarmed_gps_aided_full_battery() {
+        let t = Telemetry::zeroed();
+        assert_eq!(t.roll, 0.0);
+        assert_eq!(t.pitch, 0.0);
+        assert_eq!(t.yaw, 0.0);
+        assert_eq!(t.position, Vector3::zeros());
+        assert_eq!(t.velocity, Vector3::zeros());
+        assert_eq!(t.battery, 1.0);
+        assert_eq!(t.mode, FlightMode::Disarmed);
+        assert_eq!(t.nav_mode, FusionMode::GpsAided);
+    }
+
+    #[test]
+    fn default_matches_zeroed() {
+        assert_eq!(Telemetry::default(), Telemetry::zeroed());
+    }
+
+    #[test]
+    fn new_populates_all_fields() {
+        let pos = Vector3::new(1.0, 2.0, -3.0);
+        let vel = Vector3::new(0.5, -0.5, 0.0);
+        let t = Telemetry::new(
+            0.1,
+            0.2,
+            0.3,
+            pos,
+            vel,
+            0.75,
+            FlightMode::PositionHold,
+            FusionMode::VisualAided,
+        );
+        assert_eq!(t.roll, 0.1);
+        assert_eq!(t.pitch, 0.2);
+        assert_eq!(t.yaw, 0.3);
+        assert_eq!(t.position, pos);
+        assert_eq!(t.velocity, vel);
+        assert_eq!(t.battery, 0.75);
+        assert_eq!(t.mode, FlightMode::PositionHold);
+        assert_eq!(t.nav_mode, FusionMode::VisualAided);
+    }
+
+    #[test]
+    fn ground_speed_ignores_vertical_velocity() {
+        let t = Telemetry {
+            velocity: Vector3::new(3.0, 4.0, 100.0),
+            ..Telemetry::zeroed()
+        };
+        assert!((t.ground_speed() - 5.0).abs() < 1e-12);
+    }
+
+    #[test]
+    fn ground_speed_zero_when_stationary() {
+        assert_eq!(Telemetry::zeroed().ground_speed(), 0.0);
+    }
+}

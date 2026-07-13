@@ -10,8 +10,8 @@
 //!   range for the most reachable landing site.
 
 use crate::state::{AttitudeSetpoint, VehicleState};
-use tpt_abstractions::spatial::TerrainDatabase;
 use tpt_abstractions::GeoPosition;
+use tpt_abstractions::spatial::TerrainDatabase;
 use tpt_math::{Vector3, clamp};
 
 /// Earth parameters (shared convention with `crate::nav`).
@@ -229,14 +229,7 @@ mod tests {
             low_lon: -122.0,
         };
         let here = GeoPosition::new(37.01, -121.99, 500.0);
-        let site = best_landing_site(
-            &terrain,
-            here,
-            300.0,
-            GlideProfile::fixed_wing(),
-            8,
-        )
-        .unwrap();
+        let site = best_landing_site(&terrain, here, 300.0, GlideProfile::fixed_wing(), 8).unwrap();
         // Lowest terrain is toward the southwest corner (lower lat, lower lon).
         assert!(site.lat_deg < here.lat_deg, "lat {}", site.lat_deg);
         assert!(site.lon_deg < here.lon_deg, "lon {}", site.lon_deg);
@@ -248,13 +241,15 @@ mod tests {
             low_lat: 0.0,
             low_lon: 0.0,
         };
-        assert!(best_landing_site(
-            &terrain,
-            GeoPosition::new(0.0, 0.0, 0.0),
-            0.0,
-            GlideProfile::fixed_wing(),
-            4,
-        )
-        .is_none());
+        assert!(
+            best_landing_site(
+                &terrain,
+                GeoPosition::new(0.0, 0.0, 0.0),
+                0.0,
+                GlideProfile::fixed_wing(),
+                4,
+            )
+            .is_none()
+        );
     }
 }

@@ -167,9 +167,12 @@ pub fn diff(original: &FlightLog, replayed: &FlightLog) -> ReplayDiff {
         let b = &replayed.frames[i];
         d.max_pos = d.max_pos.max((a.pos - b.pos).norm());
         d.max_vel = d.max_vel.max((a.vel - b.vel).norm());
-        d.max_att = d
-            .max_att
-            .max((a.roll - b.roll).abs().max((a.pitch - b.pitch).abs()).max((a.yaw - b.yaw).abs()));
+        d.max_att = d.max_att.max(
+            (a.roll - b.roll)
+                .abs()
+                .max((a.pitch - b.pitch).abs())
+                .max((a.yaw - b.yaw).abs()),
+        );
         d.max_uncert = d.max_uncert.max((a.uncert - b.uncert).abs());
         d.max_motor_sum = d.max_motor_sum.max((a.motor_sum - b.motor_sum).abs());
     }
@@ -215,7 +218,16 @@ fn frame_to_csv(f: &LogFrame) -> String {
     let (gx, gy, gz) = (b.gyro.x, b.gyro.y, b.gyro.z);
     let (gnx, gny, gnz, gvx, gvy, gvz, gvn, gvn2) = match b.gps {
         Some((p, v, pn, vn)) => (p.x, p.y, p.z, v.x, v.y, v.z, pn, vn),
-        None => (f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN, f64::NAN),
+        None => (
+            f64::NAN,
+            f64::NAN,
+            f64::NAN,
+            f64::NAN,
+            f64::NAN,
+            f64::NAN,
+            f64::NAN,
+            f64::NAN,
+        ),
     };
     let (vvx, vvy, vvz, vvyaw, vvn, vvyn) = match b.vio {
         Some((p, yaw, pn, yn)) => (p.x, p.y, p.z, yaw, pn, yn),
@@ -333,8 +345,8 @@ pub fn from_csv(text: &str) -> Option<FlightLog> {
                     }
                 }
             }
-        } else if line.starts_with("# obstacle ") {
-            let body = line["# obstacle ".len()..].trim();
+        } else if let Some(rest) = line.strip_prefix("# obstacle ") {
+            let body = rest.trim();
             let parts: Vec<&str> = body.split_whitespace().collect();
             if parts.len() == 4 {
                 if let Some(o) = obstacles.as_mut() {
@@ -365,7 +377,7 @@ pub fn from_csv(text: &str) -> Option<FlightLog> {
                 batch: SenseBatch {
                     accel: Vector3::new(parse_f64(c[0]), parse_f64(c[1]), parse_f64(c[2])),
                     gyro: Vector3::new(parse_f64(c[3]), parse_f64(c[4]), parse_f64(c[5])),
-                    gps: if c[6].parse::<f64>().map_or(false, |v| v.is_nan()) {
+                    gps: if c[6].parse::<f64>().is_ok_and(|v| v.is_nan()) {
                         None
                     } else {
                         Some((
@@ -375,7 +387,7 @@ pub fn from_csv(text: &str) -> Option<FlightLog> {
                             parse_f64(c[13]),
                         ))
                     },
-                    vio: if c[14].parse::<f64>().map_or(false, |v| v.is_nan()) {
+                    vio: if c[14].parse::<f64>().is_ok_and(|v| v.is_nan()) {
                         None
                     } else {
                         Some((
@@ -445,7 +457,11 @@ mod tests {
         assert!(d.max_vel < 1e-9, "max_vel = {:e}", d.max_vel);
         assert!(d.max_att < 1e-9, "max_att = {:e}", d.max_att);
         assert!(d.max_uncert < 1e-9, "max_uncert = {:e}", d.max_uncert);
-        assert!(d.max_motor_sum < 1e-9, "max_motor_sum = {:e}", d.max_motor_sum);
+        assert!(
+            d.max_motor_sum < 1e-9,
+            "max_motor_sum = {:e}",
+            d.max_motor_sum
+        );
     }
 
     #[test]

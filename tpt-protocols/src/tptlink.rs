@@ -205,8 +205,7 @@ pub const MSG_HEALTH_REPORT: u8 = 1;
 pub const MAX_HEALTH_MOTORS: usize = 8;
 
 /// Wire size (bytes) of a [`HealthReport`] payload.
-pub const HEALTH_REPORT_LEN: usize =
-    4 + 4 + 4 + 4 + 1 + MAX_HEALTH_MOTORS * (4 + 4 + 1); // 4 floats + count + motors
+pub const HEALTH_REPORT_LEN: usize = 4 + 4 + 4 + 4 + 1 + MAX_HEALTH_MOTORS * (4 + 4 + 1); // 4 floats + count + motors
 
 /// Per-motor health sample carried in a [`HealthReport`].
 #[derive(Debug, Clone, Copy, PartialEq)]

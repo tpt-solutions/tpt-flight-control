@@ -294,3 +294,130 @@ pub fn write_telemetry(regs: &mut impl RegisterInterface, bytes: &[u8]) {
         regs.usart_write(b);
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn init_clocks_and_io_enables_expected_peripherals() {
+        let mut regs = Regs::new();
+        init_clocks_and_io(&mut regs);
+
+        assert_eq!(regs.rcc_ahb1enr & 0b111, 0b111, "GPIOA/B/C clocks enabled");
+        assert_eq!(
+            regs.rcc_apb1enr & ((1 << 17) | 1),
+            (1 << 17) | 1,
+            "USART2 + TIM2 clocks enabled"
+        );
+        // PB0..PB3 configured as push-pull output (MODER = 0b01 per pin).
+        let expected_moder = 0b01_01_01_01u32;
+        assert_eq!(regs.gpio_moder[GpioBank::B as usize] & 0xFF, expected_moder);
+        assert_eq!(regs.tim_arr, 1000);
+    }
+
+    #[test]
+    fn rcc_enable_sets_distinct_bits_per_peripheral() {
+        let mut regs = Regs::new();
+        regs.rcc_enable(Peripheral::GpioA);
+        assert_eq!(regs.rcc_ahb1enr, 0b001);
+        assert_eq!(regs.rcc_apb1enr, 0);
+
+        let mut regs = Regs::new();
+        regs.rcc_enable(Peripheral::GpioB);
+        assert_eq!(regs.rcc_ahb1enr, 0b010);
+
+        let mut regs = Regs::new();
+        regs.rcc_enable(Peripheral::GpioC);
+        assert_eq!(regs.rcc_ahb1enr, 0b100);
+
+        let mut regs = Regs::new();
+        regs.rcc_enable(Peripheral::Usart2);
+        assert_eq!(regs.rcc_apb1enr, 1 << 17);
+        assert_eq!(regs.rcc_ahb1enr, 0);
+
+        let mut regs = Regs::new();
+        regs.rcc_enable(Peripheral::Tim2);
+        assert_eq!(regs.rcc_apb1enr, 1);
+    }
+
+    #[test]
+    fn gpio_set_clear_round_trip() {
+        let mut regs = Regs::new();
+        regs.gpio_set(GpioBank::A, 0b0101);
+        assert_eq!(regs.gpio_odr[GpioBank::A as usize], 0b0101);
+        regs.gpio_set(GpioBank::A, 0b1000);
+        assert_eq!(regs.gpio_odr[GpioBank::A as usize], 0b1101);
+        regs.gpio_clear(GpioBank::A, 0b0001);
+        assert_eq!(regs.gpio_odr[GpioBank::A as usize], 0b1100);
+    }
+
+    #[test]
+    fn gpio_read_reflects_idr() {
+        let mut regs = Regs::new();
+        regs.gpio_idr[GpioBank::C as usize] = 0xABCD;
+        assert_eq!(regs.gpio_read(GpioBank::C), 0xABCD);
+    }
+
+    #[test]
+    fn gpio_config_out_sets_moder_bits_for_selected_pins_only() {
+        let mut regs = Regs::new();
+        // Pins 0 and 2 -> bit pairs [1:0] and [5:4] become 0b01; pin 1's
+        // bit pair [3:2] must stay untouched (0b00).
+        regs.gpio_config_out(GpioBank::A, 0b101);
+        let m = regs.gpio_moder[GpioBank::A as usize];
+        assert_eq!(m & 0b11, 0b01, "pin 0");
+        assert_eq!((m >> 2) & 0b11, 0b00, "pin 1 untouched");
+        assert_eq!((m >> 4) & 0b11, 0b01, "pin 2");
+    }
+
+    #[test]
+    fn usart_tx_ready_reflects_sr_bit() {
+        let mut regs = Regs::new();
+        regs.usart_sr = 0;
+        assert!(!regs.usart_tx_ready());
+        regs.usart_sr = 0x80;
+        assert!(regs.usart_tx_ready());
+    }
+
+    #[test]
+    fn write_telemetry_appends_to_tx_log() {
+        let mut regs = Regs::new();
+        write_telemetry(&mut regs, b"hi");
+        assert_eq!(regs.tx_log.as_slice(), b"hi");
+        write_telemetry(&mut regs, b"!");
+        assert_eq!(regs.tx_log.as_slice(), b"hi!");
+    }
+
+    #[test]
+    fn tim_set_arr_and_clock_advance() {
+        let mut regs = Regs::new();
+        regs.tim_set_arr(2000);
+        assert_eq!(regs.tim_arr, 2000);
+        assert_eq!(regs.monotonic_micros(), 0);
+        regs.advance_clock(500);
+        assert_eq!(regs.monotonic_micros(), 500);
+        regs.advance_clock(250);
+        assert_eq!(regs.monotonic_micros(), 750);
+    }
+
+    #[test]
+    fn tx_log_push_as_slice_clear() {
+        let mut log = TxLog::default();
+        assert_eq!(log.as_slice(), b"");
+        log.push(b'a');
+        log.push(b'b');
+        assert_eq!(log.as_slice(), b"ab");
+        log.clear();
+        assert_eq!(log.as_slice(), b"");
+    }
+
+    #[test]
+    fn tx_log_does_not_overflow_backing_buffer() {
+        let mut log = TxLog::default();
+        for _ in 0..300 {
+            log.push(b'x');
+        }
+        assert_eq!(log.as_slice().len(), 256);
+    }
+}

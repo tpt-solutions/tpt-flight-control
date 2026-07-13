@@ -79,7 +79,13 @@ impl PeerTelemetry {
 pub fn serialize_peer(out: &mut [u8], seq: u16, peer: &PeerTelemetry) -> Option<usize> {
     let mut payload = [0u8; PEER_TELEMETRY_LEN];
     let n = peer.encode(&mut payload)?;
-    tptlink::serialize_plain(out, Channel::Telemetry, MSG_PEER_TELEMETRY, seq, &payload[..n])
+    tptlink::serialize_plain(
+        out,
+        Channel::Telemetry,
+        MSG_PEER_TELEMETRY,
+        seq,
+        &payload[..n],
+    )
 }
 
 /// Parse a TPT-Link frame on [`Channel::Telemetry`] into a [`PeerTelemetry`].
@@ -101,9 +107,7 @@ pub struct SwarmNetwork<const N: usize> {
 impl<const N: usize> SwarmNetwork<N> {
     /// Create an empty network.
     pub const fn new() -> Self {
-        Self {
-            peers: [None; N],
-        }
+        Self { peers: [None; N] }
     }
 
     /// Ingest a peer's telemetry, keyed by `id` modulo `N`. Returns the slot
@@ -219,7 +223,11 @@ mod tests {
     fn relative_controller_closes_offset() {
         let ctrl = RelativePositionController::new(0.5);
         // Want to be 2 m behind (=-x) the peer. Own at 0, peer at 0, offset -x.
-        let v = ctrl.update(Vector3::zeros(), Vector3::zeros(), Vector3::new(-2.0, 0.0, 0.0));
+        let v = ctrl.update(
+            Vector3::zeros(),
+            Vector3::zeros(),
+            Vector3::new(-2.0, 0.0, 0.0),
+        );
         assert!((v.x + 1.0).abs() < 1e-9, "v.x {}", v.x);
         // Once at the slot, command goes to zero.
         let v2 = ctrl.update(

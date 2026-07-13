@@ -28,6 +28,24 @@ cargo build --workspace
 cargo test  --workspace
 ```
 
+`cargo test --workspace` alone only exercises default features. CI's
+`feature-matrix` job additionally runs `--all-features` tests for crates
+whose functionality is feature-gated (`tpt-core`'s `autopilot`, `swarm`,
+`formation`, `glide`, `triple-redundancy`, etc. are all off by default) —
+run it locally before relying on plain `cargo test --workspace` to catch
+regressions in those modules:
+
+```sh
+cargo test -p tpt-core --all-features
+cargo test -p tpt-mixer --all-features
+cargo test -p tpt-sensor-fusion --all-features
+cargo test -p tpt-mapping --all-features
+cargo test -p tpt-protocols --all-features
+cargo test -p tpt-sim --all-features
+cargo test -p tpt-backend-bare-metal --all-features
+cargo test -p tpt-sovereign-toolchain --all-features
+```
+
 Run a single test:
 
 ```sh

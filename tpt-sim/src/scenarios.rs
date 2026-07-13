@@ -440,12 +440,9 @@ impl GpsDeniedSim {
 
     /// The obstacle field as `(center, radius)` pairs, if one is installed.
     pub fn obstacle_spheres(&self) -> Option<Vec<(Vector3<f64>, f64)>> {
-        self.obstacles.as_ref().map(|o| {
-            o.spheres()
-                .iter()
-                .map(|s| (s.center, s.radius))
-                .collect()
-        })
+        self.obstacles
+            .as_ref()
+            .map(|o| o.spheres().iter().map(|s| (s.center, s.radius)).collect())
     }
 
     /// Run `seconds` of simulation at `dt`.
