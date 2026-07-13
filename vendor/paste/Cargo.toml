@@ -1,0 +1,17 @@
+[package]
+name = "paste"
+version = "1.0.16"
+edition = "2018"
+rust-version = "1.54"
+license = "MIT OR Apache-2.0"
+description = """
+Vendored copy of `pastey` 0.1.1 (https://crates.io/crates/pastey), published
+under the crate name `paste` via a workspace [patch.crates-io] so dependents
+pinning `paste = "1.0"` resolve here instead of the unmaintained,
+RUSTSEC-2024-0436-flagged `paste` crate on crates.io. `pastey` is an
+actively maintained, API-compatible fork of `paste` by the same author plus
+a new co-maintainer; see vendor/paste/README.md for upstream docs.
+"""
+
+[lib]
+proc-macro = true

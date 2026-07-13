@@ -11,13 +11,14 @@
 
 #[cfg(feature = "web")]
 fn main() {
-    use leptos::*;
+    use leptos::mount::mount_to_body;
+    use leptos::prelude::*;
     use tpt_web::WebTelemetry;
 
     // In a real deployment `telemetry` is driven by a WebSocket bridge feeding
     // `WebTelemetry::from_json` frames from the vehicle/GCS link.
     mount_to_body(|| {
-        let (tel, _set) = create_signal(WebTelemetry::sample());
+        let (tel, _set) = signal(WebTelemetry::sample());
         let tel: Signal<WebTelemetry> = tel.into();
         view! { <tpt_web::ui::Dashboard telemetry=tel/> }
     });

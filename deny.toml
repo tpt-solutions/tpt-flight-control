@@ -14,7 +14,29 @@
 [advisories]
 version = 2
 yanked = "warn"
-ignore = []
+ignore = [
+    # quick-xml is pulled in only by wayland-scanner, a *build-time* codegen
+    # tool in winit's Wayland backend (reachable transitively only via
+    # tpt-gcs/tpt-web's optional egui/eframe GUI feature). It parses
+    # wayland-scanner's own vendored, trusted Wayland protocol XML specs at
+    # compile time, never untrusted/network input, so the DoS impact
+    # described in these advisories does not apply to our usage. No fix is
+    # available: wayland-scanner pins `quick-xml = "^0.39"`, which excludes
+    # the 0.41 release these were fixed in, and Cargo's [patch] mechanism
+    # cannot override that requirement without forking wayland-scanner
+    # itself (disproportionate for a build-time-only dependency).
+    "RUSTSEC-2026-0194", # quick-xml: quadratic run time on duplicate attrs
+    "RUSTSEC-2026-0195", # quick-xml: unbounded namespace-decl allocation
+    # proc-macro-error2 is a compile-time-only helper used internally by
+    # leptos's own macro crate (reachable only via tpt-web's optional `web`
+    # feature). It has no known vulnerability, just unmaintained status, and
+    # no drop-in API-compatible replacement exists (the advisory's suggested
+    # alternatives, manyhow/proc-macro2-diagnostics, have a different API) --
+    # unlike `paste` below, forking ~1400 lines of macro-error internals we
+    # don't own with no compatibility guarantee is a worse risk than
+    # accepting this as a documented exception.
+    "RUSTSEC-2026-0173",
+]
 
 [licenses]
 version = 2
@@ -28,6 +50,9 @@ allow = [
     "Unicode-DFS-2016",
     "CC0-1.0",          # common for small data/logo assets
     "Unicode-3.0",      # unicode-ident
+    "BSL-1.0",          # Boost Software License; clipboard-win/error-code (arboard, via egui-winit)
+    "OFL-1.1",          # SIL Open Font License; egui's bundled default fonts
+    "Ubuntu-font-1.0",  # Ubuntu Font Licence; egui's bundled default fonts
 ]
 confidence-threshold = 0.8
 exceptions = []

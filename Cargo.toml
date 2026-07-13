@@ -48,3 +48,11 @@ nalgebra = { version = "0.33", default-features = false, features = ["libm"] }
 [profile.release]
 opt-level = 3
 lto = true
+
+# `paste` (pulled in transitively by leptos's `tachys`, itself only reachable
+# via tpt-web's optional `web` feature) is unmaintained with no upgrade path
+# (RUSTSEC-2024-0436). `vendor/paste` is a vendored copy of `pastey`, the
+# actively maintained, API-identical fork the advisory recommends, published
+# under the `paste` name so dependents resolve here instead.
+[patch.crates-io]
+paste = { path = "vendor/paste" }

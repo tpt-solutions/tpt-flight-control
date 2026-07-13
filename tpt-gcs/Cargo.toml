@@ -14,10 +14,30 @@ tpt-sensor-fusion.workspace = true
 
 # Desktop GUI (egui + eframe). Pulled in only with `--features gui` so the
 # core library and the console runner build and test without a GUI toolchain.
-egui = { version = "0.29", optional = true }
-eframe = { version = "0.29", optional = true }
+egui = { version = "0.35", optional = true }
+eframe = { version = "0.35", default-features = false, features = [
+    "accesskit",
+    "default_fonts",
+    "wayland",
+    "web_screen_reader",
+    "wgpu",
+    "x11",
+], optional = true }
+# Pinned only to steer winit's feature selection (Cargo unifies features across
+# the whole build): `wayland-csd-adwaita-notitle` draws Wayland fallback
+# decorations (used when a compositor has no server-side decorations) without
+# pulling in `ab_glyph`/`ttf-parser`, which is unmaintained (RUSTSEC-2026-0192)
+# with no upgrade available. This drops the title text from that fallback
+# chrome only; window controls (close/resize) still render.
+winit = { version = "0.30", default-features = false, features = [
+    "rwh_06",
+    "x11",
+    "wayland",
+    "wayland-dlopen",
+    "wayland-csd-adwaita-notitle",
+], optional = true }
 
 [features]
 default = []
 # Enables the egui-based desktop GCS window.
-gui = ["dep:egui", "dep:eframe"]
+gui = ["dep:egui", "dep:eframe", "dep:winit"]

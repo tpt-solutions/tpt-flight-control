@@ -6,7 +6,7 @@
 //! bridge + telemetry model in `lib.rs`) needs no wasm toolchain.
 
 use crate::WebTelemetry;
-use leptos::*;
+use leptos::prelude::*;
 
 /// A small live dashboard panel bound to a telemetry signal.
 #[component]

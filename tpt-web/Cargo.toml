@@ -18,7 +18,7 @@ tpt-gcs.workspace = true
 # reproducibly with a single command and the host/test build stays free of the
 # heavy wasm UI dependency tree. See `examples/sitl_demo.rs` and
 # `docs/architecture-web.md`.
-leptos = { version = "0.6", optional = true, features = ["csr"] }
+leptos = { version = "0.8", optional = true, features = ["csr"] }
 
 # `tpt-sim` powers the in-browser SITL demo: a GPS-denied scenario is run
 # client-side and streamed into the dashboard (no vehicle, no install).

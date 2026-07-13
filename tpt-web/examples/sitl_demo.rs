@@ -23,7 +23,8 @@
 
 #[cfg(feature = "web")]
 pub fn main() {
-    use leptos::*;
+    use leptos::mount::mount_to_body;
+    use leptos::prelude::*;
     use std::cell::RefCell;
     use std::rc::Rc;
     use std::time::Duration;
@@ -32,7 +33,7 @@ pub fn main() {
     use tpt_web::WebTelemetry;
 
     mount_to_body(|| {
-        let (telemetry, set_telemetry) = create_signal(WebTelemetry::sample());
+        let (telemetry, set_telemetry) = signal(WebTelemetry::sample());
 
         // One closed-loop SITL run, owned by the animation loop.
         let sim = Rc::new(RefCell::new({
